@@ -139,7 +139,7 @@ def run_campaign(
 
         # Adaptive expansion is evidence-triggered and bounded: only a harmless
         # canary signal earns additional fixed framings for that same case.
-        if adaptive and record["assessment"] == "potential_guardrail_failure" and case.case_id not in expanded:
+        if adaptive and record["assessment"] == "potential_boundary_failure" and case.case_id not in expanded:
             expanded.add(case.case_id)
             for next_index in range(1, variants):
                 queue.insert(next_index - 1, (case, next_index))
