@@ -10,7 +10,7 @@ the benchmark measures broadly, this set re-tests narrowly and repeatedly.
 | File | Contents |
 |---|---|
 | `data/known_bypasses.json` | 14 entries (11 benchmark, 1 guardrail, 2 scanner): 13 confirmed, 1 intermittent. One entry per case id, with per-model observations. |
-| `data/benchmark_regression.jsonl` | The exact 11 benchmark rows from `data/benchmark_v0.8.0.jsonl`, copied verbatim. SHA-256 pinned in `data/CHECKSUMS.txt`. |
+| `data/benchmark_regression.jsonl` | The exact 11 benchmark rows from `data/benchmark_v0.8.0.jsonl`, copied verbatim. SHA-256 pinned in `data/CHECKSUMS.txt`. It is adversarial-only by design (all 11 entries are adversarial cases), so it is a scoring input for `src.evaluate`, not a standalone benchmark version — `src.validate`'s both-splits check does not apply to it. |
 | `scripts/regression_report.py` | Checks a scored benchmark CSV against the set and prints per-family verdicts. Stdlib only, no API calls. |
 
 Entry fields: `id`, `instrument` (`benchmark` | `guardrail` | `scanner`),
