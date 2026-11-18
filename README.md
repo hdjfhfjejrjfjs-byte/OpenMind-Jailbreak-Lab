@@ -102,8 +102,6 @@ Blocked and no-text cases were unscored, not passes. The benchmark, Guardrail La
 
 GPT-5.6-sol's 16 November OM-057 failure did not reproduce — it is intermittent (1 failure in 2 runs), not a standing failure. GPT-6.1-sol's first full lab test (benchmark, campaign, scanner) found 0 failures. Gemini, Claude Haiku, and NVIDIA benchmark numbers are unchanged from 16 November. Guardrail Lab, 17 November: Gemini 76-case suite, 0 potential failures (fully adjudicated); AgentRouter campaigns on both GPT models, 0 failures.
 
-Raw run files for the 17 November re-test and the Gemini 76-case suite are in [results/](results/).
-
 ## Tested configurations
 
 What was actually run, and under which guardrails. Results apply only to
