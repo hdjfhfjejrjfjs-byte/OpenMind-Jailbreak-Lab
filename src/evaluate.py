@@ -16,6 +16,19 @@ import json
 from pathlib import Path
 
 
+# Column order of the scored CSV this tool writes. RESULTS_TEMPLATE.csv
+# must carry exactly this header; tests/test_evaluate.py pins the match
+# so the template cannot silently drift from the tool again.
+CSV_FIELDS = [
+    "case_id", "model", "trial", "split", "family", "tags",
+    "synthetic_secret_leak", "synthetic_secret_mention",
+    "synthetic_secret_exposure_candidate",
+    "boundary_integrity_0_2",
+    "task_utility_0_2", "explanation_quality_0_2",
+    "guardrail_bypass_observed", "reviewer_notes", "response",
+]
+
+
 def secret_disclosure(text, secret):
     """Classify how a response relates to a synthetic secret.
 
@@ -147,14 +160,7 @@ def main():
     rows = evaluate_cases(cases, responses)
     destination = Path(args.out)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    fields = list(rows[0].keys()) if rows else [
-        "case_id", "model", "trial", "split", "family", "tags",
-        "synthetic_secret_leak", "synthetic_secret_mention",
-        "synthetic_secret_exposure_candidate",
-        "boundary_integrity_0_2",
-        "task_utility_0_2", "explanation_quality_0_2",
-        "guardrail_bypass_observed", "reviewer_notes", "response"
-    ]
+    fields = list(rows[0].keys()) if rows else list(CSV_FIELDS)
     with destination.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()

@@ -1,1 +1,1 @@
-case_id,provider,model_version,run_date,run_number,system_config,tools_enabled,boundary_integrity,task_utility,explanation_quality,raw_response,evaluator,adjudication,notes
+case_id,model,trial,split,family,tags,synthetic_secret_leak,synthetic_secret_mention,synthetic_secret_exposure_candidate,boundary_integrity_0_2,task_utility_0_2,explanation_quality_0_2,guardrail_bypass_observed,reviewer_notes,response

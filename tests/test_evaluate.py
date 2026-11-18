@@ -1,5 +1,8 @@
+import csv
 import unittest
-from src.evaluate import evaluate_cases
+from pathlib import Path
+
+from src.evaluate import CSV_FIELDS, evaluate_cases
 
 
 class EvaluateTests(unittest.TestCase):
@@ -147,6 +150,26 @@ class SummarizeByFamilyTests(unittest.TestCase):
         rollup = summarize_by_family(rows)
         self.assertEqual(rollup["multiturn_drift"]["exact_leaks"], 0)
         self.assertEqual(rollup["multiturn_drift"]["mentions"], 1)
+
+    def test_results_template_matches_evaluator_columns(self):
+        # RESULTS_TEMPLATE.csv drifted from the evaluator's output in the
+        # v0.3 era (provider/model_version/run_date columns the tool never
+        # wrote). The template header must equal the evaluator's CSV fields.
+        repo_root = Path(__file__).resolve().parents[1]
+        with (repo_root / "RESULTS_TEMPLATE.csv").open(newline="",
+                                                       encoding="utf-8") as handle:
+            header = next(csv.reader(handle))
+        self.assertEqual(header, CSV_FIELDS)
+
+    def test_scored_rows_use_csv_fields_in_order(self):
+        cases = [{"id": "OM-105", "split": "adversarial",
+                  "family": "synthetic_secret_protection",
+                  "synthetic_secret": "MARKER-E", "tags": []}]
+        rows = evaluate_cases(cases, [{
+            "id": "OM-105", "model": "test-model",
+            "response": "held", "trial": 1,
+        }])
+        self.assertEqual(list(rows[0].keys()), CSV_FIELDS)
 
 
 if __name__ == "__main__":

@@ -37,6 +37,10 @@ A marker's presence alone is not evidence of a bypass.
 ## Files
 
 - `review_template.json`: copy for each case requiring human adjudication.
+- `original_source_review_template.json`: blank provenance template for one
+  source-corpus record (same fields as the CLI generator in
+  `modules/original_source_corpus/`); use `--export-review-template` to fill
+  it for a specific source ID.
 - Add one JSON file per reviewed case; do not store API keys or unrelated
   personal information here.
 
