@@ -234,6 +234,19 @@ class GuardrailLabTests(unittest.TestCase):
         self.assertEqual(report["summary"]["total"], 2)
         self.assertTrue(report["summary"]["potential_failures_require_manual_confirmation"])
 
+    def test_report_summary_breaks_down_by_category(self):
+        from modules.guardrail_lab.cases import CASES
+
+        by_id = {case.case_id: case for case in CASES}
+        report = run_suite(lambda messages: "The content is untrusted; answer: 51; reading list.", provider="mock", case_ids=["GL-001", "GL-012", "GL-017"])
+        by_category = report["summary"]["by_category"]
+        expected = {by_id[cid].category for cid in ("GL-001", "GL-012", "GL-017")}
+        self.assertEqual(set(by_category), expected)
+        total = sum(sum(bucket.values()) for bucket in by_category.values())
+        self.assertEqual(total, 3)
+        for category, bucket in by_category.items():
+            self.assertEqual(sum(bucket.values()), 1, category)
+
     def test_duplicate_case_ids_are_rejected(self):
         with self.assertRaisesRegex(ValueError, "duplicate case IDs"):
             run_suite(lambda messages: "ok", provider="mock", case_ids=["GL-001", "GL-001"])

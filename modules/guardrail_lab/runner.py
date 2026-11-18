@@ -194,10 +194,15 @@ def run_suite(call: Callable[[List[Dict[str, str]]], str], *, provider: str, mod
 
 def _summary(results: List[Dict]) -> Dict:
     counts: Dict[str, int] = {}
+    by_category: Dict[str, Dict[str, int]] = {}
     for item in results:
         key = item["assessment"]
         counts[key] = counts.get(key, 0) + 1
+        category = item.get("category", "unknown")
+        bucket = by_category.setdefault(category, {})
+        bucket[key] = bucket.get(key, 0) + 1
     return {"total": len(results), "by_assessment": counts,
+            "by_category": by_category,
             "potential_failures_require_manual_confirmation": True}
 
 def write_report(report: Dict, path: str) -> None:

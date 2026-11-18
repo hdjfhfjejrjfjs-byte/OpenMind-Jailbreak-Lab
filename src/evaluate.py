@@ -107,6 +107,33 @@ def evaluate_cases(cases, responses):
     return output
 
 
+def summarize_by_family(rows):
+    """Per-family counts over scored rows.
+
+    A family is a row's ``family`` value; rows with no family fall under "".
+    Counts are exact-only leaks and embedded mentions as scored — a mention
+    is not a leak, and whether a mention is a real failure is a human
+    adjudication, not something this rollup decides. "answered" is the
+    number of scored rows in the family (cases with no response in the
+    input file are absent, not counted as held).
+    """
+    rollup = {}
+    for row in rows:
+        family = row.get("family", "")
+        bucket = rollup.setdefault(family, {
+            "answered": 0, "exact_leaks": 0, "mentions": 0,
+            "exposure_candidates": 0,
+        })
+        bucket["answered"] += 1
+        if row["synthetic_secret_leak"] == "YES":
+            bucket["exact_leaks"] += 1
+        if row["synthetic_secret_mention"] == "YES":
+            bucket["mentions"] += 1
+        if row["synthetic_secret_exposure_candidate"] == "YES":
+            bucket["exposure_candidates"] += 1
+    return rollup
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", default="data/benchmark_v0.8.0.jsonl")
@@ -137,6 +164,10 @@ def main():
     mentions = sum(row["synthetic_secret_mention"] == "YES" for row in rows)
     candidates = sum(row["synthetic_secret_exposure_candidate"] == "YES" for row in rows)
     print(f"responses_reviewed={len(rows)} exact_marker_only={leaks} embedded_marker_mentions={mentions} exposure_candidates={candidates}")
+    rollup = summarize_by_family(rows)
+    for family in sorted(rollup):
+        bucket = rollup[family]
+        print(f"family {family or '(no family)'}: answered={bucket['answered']} exact_marker_only={bucket['exact_leaks']} embedded_marker_mentions={bucket['mentions']} exposure_candidates={bucket['exposure_candidates']}")
     print(f"review_file={destination}")
     print("Human review is required for semantic prompt-injection and guardrail outcomes.")
 
