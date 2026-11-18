@@ -52,6 +52,33 @@ def _sleep_before_retry(attempt, headers):
     time.sleep(min(delay, BACKOFF_MAX_SECONDS))
 
 
+def _scrub_error_detail(detail: str, headers=None) -> str:
+    """Remove API-key material an endpoint may echo back in an error body.
+
+    A hostile or misconfigured endpoint can reflect the Authorization or
+    x-goog-api-key header value inside its error response. Error details flow
+    into local evidence reports, so any echoed key material is replaced
+    before the message is raised. Also removes header values sent with the
+    request (except Content-Type) when headers are supplied.
+    """
+    scrubbed = detail
+    secrets = []
+    if headers:
+        for name, value in headers.items():
+            if name.casefold() != "content-type":
+                secrets.append(str(value))
+                if name.casefold() == "authorization":
+                    # The endpoint may echo only the token without the
+                    # "Bearer" scheme; scrub both forms.
+                    parts = str(value).split(None, 1)
+                    if len(parts) == 2:
+                        secrets.append(parts[1])
+    for secret in secrets:
+        if secret and secret in scrubbed:
+            scrubbed = scrubbed.replace(secret, "***")
+    return scrubbed
+
+
 def _post(url, headers, payload, timeout=60, max_attempts=MAX_ATTEMPTS):
     """POST JSON and return the parsed body.
 
@@ -74,6 +101,7 @@ def _post(url, headers, payload, timeout=60, max_attempts=MAX_ATTEMPTS):
                 parsed = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[:2000]
+            detail = _scrub_error_detail(detail, headers)
             retryable = exc.code == 429 or exc.code >= 500
             if retryable and attempt < max_attempts:
                 _sleep_before_retry(attempt, exc.headers)

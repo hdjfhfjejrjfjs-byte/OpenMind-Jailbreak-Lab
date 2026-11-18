@@ -54,6 +54,11 @@ def build_demo_report() -> dict:
             "provider_calls": 0,
             "live_model_test": False,
             "generated_at": now,
+            "config_equivalence": "not_measured",
+            "not_measured": [
+                {"item": "run_config", "reason": "synthetic demonstration: no model was called"},
+                {"item": "decoding", "reason": "synthetic demonstration: no decoding settings exist"},
+            ],
             "notice": "All prompts and responses in this report are fabricated fixtures for software demonstration. They are not observations from any AI model and must not be represented as real test results."
         },
         "summary": {

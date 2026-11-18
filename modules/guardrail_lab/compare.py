@@ -8,7 +8,7 @@ INCONCLUSIVE_ASSESSMENTS = {
     "partial", "empty", "not_received", "unknown",
 }
 INCONCLUSIVE_RESPONSE_STATUSES = {
-    "incomplete", "partial", "empty", "not_received",
+    "incomplete", "partial", "empty", "not_received", "truncated", "length",
 }
 
 
@@ -25,16 +25,53 @@ def _outcome(item):
         response_status.strip().casefold()
         if isinstance(response_status, str) else ""
     )
+    finish_reason = item.get("finish_reason")
+    if isinstance(finish_reason, str):
+        finish_reason = finish_reason.strip().casefold()
+    truncated = item.get("truncated") is True or finish_reason == "length"
     comparable = (
         assessment.casefold() not in INCONCLUSIVE_ASSESSMENTS
         and response_status not in INCONCLUSIVE_RESPONSE_STATUSES
+        and not truncated
     )
     return assessment, comparable
 
 
-def compare_reports(reports):
+def config_equivalence(reports):
+    """Compare reproduction attributes across reports.
+
+    A missing or unknown config is reported as not_measured; it is never
+    assumed equivalent. Divergence means the reports cannot support a
+    controlled comparison.
+    """
+    blocks = []
+    for report in reports:
+        prov = report.get("provenance") or {}
+        blocks.append({
+            "label": report.get("provider", "unknown"),
+            "config_hash": prov.get("config_hash"),
+            "not_measured_count": len(prov.get("not_measured") or []),
+        })
+    hashes = {b["config_hash"] for b in blocks}
+    if any(h is None for h in hashes):
+        return {
+            "status": "not_measured",
+            "reason": "one or more reports lack a config_hash",
+            "blocks": blocks,
+        }
+    if len(hashes) != 1:
+        return {
+            "status": "divergent",
+            "reason": "reports were produced under different measured configurations",
+            "blocks": blocks,
+        }
+    return {"status": "equivalent", "blocks": blocks}
+
+
+def compare_reports(reports, *, strict_config=False):
     if len(reports) < 2:
         raise ValueError("at least two reports are required")
+    equivalence = config_equivalence(reports)
     indexed = []
     source_labels = set()
     for report in reports:
@@ -60,6 +97,7 @@ def compare_reports(reports):
     union = set.union(*(set(item[2]) for item in indexed))
     rows, disagreements = [], []
     comparable_case_ids = []
+    config_incomparable = strict_config and equivalence["status"] != "equivalent"
     for case_id in sorted(union):
         outcomes = {}
         all_present = True
@@ -83,15 +121,16 @@ def compare_reports(reports):
             len(scored_values) == len(indexed)
             and len(set(scored_values)) == 1
         )
-        if all_present and all_comparable:
+        case_comparable = all_present and all_comparable and not config_incomparable
+        if case_comparable:
             comparable_case_ids.append(case_id)
         rows.append({
             "case_id": case_id,
             "outcomes": outcomes,
-            "comparable": all_present and all_comparable,
-            "agreement": agreement if all_present and all_comparable else None,
+            "comparable": case_comparable,
+            "agreement": agreement if case_comparable else None,
         })
-        if not (all_present and all_comparable and agreement):
+        if not (case_comparable and agreement):
             disagreements.append(case_id)
     agreement_rate = (
         sum(row["agreement"] for row in rows if row["comparable"])
@@ -113,8 +152,51 @@ def compare_reports(reports):
             "inconclusive_count": inconclusive_count,
             "assessment_counts": counts,
         })
+    # Descriptive dispersion only. One row per case per provider with repeated
+    # measures and provider-level correlation; a naive independent-Bernoulli
+    # confidence interval would imply false precision. NOT a confidence bound.
+    n_observations = sum(len(mapping) for _, _, mapping in indexed)
+    uncertainty = {
+        "kind": "descriptive_dispersion",
+        "n_observations": n_observations,
+        "comparable_case_count": len(comparable_case_ids),
+        "excluded_case_count": len(union) - len(comparable_case_ids),
+        "agreement_rate": agreement_rate,
+        "note": (
+            "Descriptive only: n_observations counts case-provider rows, not "
+            "independent trials. Repeated measures and provider-level "
+            "correlation require a cluster/bootstrap design before any "
+            "confidence claim. No uncertainty interval is published."
+        ),
+    }
+    interpretation = (
+        "Agreement is calculated only when every report contains a scored "
+        "assessment for the case. Inconclusive, partial, empty, not-received, "
+        "truncated, and not-run outcomes are excluded from the agreement "
+        "denominator; missing cases remain distinct. Agreement compares "
+        "automated labels only and is not a security score or proof of "
+        "equivalent model behavior. Review full transcripts and normalize "
+        "run conditions before drawing conclusions."
+    )
+    if equivalence["status"] == "not_measured":
+        interpretation += (
+            " Config equivalence could not be established: one or more reports "
+            "lack reproduction attributes; treat any comparison as uncontrolled."
+        )
+    elif equivalence["status"] == "divergent":
+        interpretation += (
+            " Config equivalence failed: reports used different measured "
+            "settings; disagreement may be config drift, not model behavior."
+        )
+    if config_incomparable:
+        interpretation += (
+            " Strict config mode marked every case incomparable and suppressed "
+            "agreement rates."
+        )
     return {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
+        "config_equivalence": equivalence,
+        "strict_config": strict_config,
         "providers": provider_summaries,
         "common_case_count": len(common),
         "union_case_count": len(union),
@@ -128,14 +210,8 @@ def compare_reports(reports):
         "agreement_rate_on_common_cases": agreement_rate,
         "disagreement_or_missing_or_inconclusive_case_ids": disagreements,
         "cases": rows,
-        "interpretation": (
-            "Agreement is calculated only when every report contains a scored "
-            "assessment for the case. Inconclusive, partial, empty, not-received, "
-            "and not-run outcomes are excluded from the agreement denominator; "
-            "missing cases remain distinct. Agreement compares automated labels "
-            "only and is not a security score or proof of equivalent model behavior. "
-            "Review full transcripts and normalize run conditions before drawing conclusions."
-        ),
+        "uncertainty": uncertainty,
+        "interpretation": interpretation,
     }
 
 
@@ -143,10 +219,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("reports", nargs="+", help="two or more Guardrail Lab JSON report paths")
     parser.add_argument("--output", help="optional JSON output path")
+    parser.add_argument(
+        "--allow-unknown-config", action="store_true",
+        help="compare legacy reports without reproduction attributes (uncontrolled)",
+    )
     args = parser.parse_args(argv)
     try:
         reports = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.reports]
-        result = compare_reports(reports)
+        result = compare_reports(reports, strict_config=not args.allow_unknown_config)
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         parser.error(str(exc))
     rendered = json.dumps(result, indent=2, ensure_ascii=False)

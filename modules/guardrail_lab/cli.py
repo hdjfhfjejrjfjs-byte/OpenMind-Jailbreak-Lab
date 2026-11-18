@@ -4,8 +4,12 @@ from pathlib import Path
 from .cases import CASES
 from .source_cases import SOURCE_CASES
 from .runner import run_suite, write_report
+from .measurement import (
+    RunConfig, case_set_hashes, fingerprint_endpoint, not_measured_entry,
+)
 from .campaign import run_campaign
 from .registry import save_candidate_records
+from .preflight import preflight
 from .openai_compatible import (
     PRESET_BASE_URLS,
     PRESET_API_KEY_ENVS,
@@ -61,6 +65,14 @@ def main(argv=None):
     parser.add_argument("--delay", type=float, default=0.0, help="Seconds between API calls")
     parser.add_argument("--max-seconds", type=float, default=None, help="Stop scheduling new requests after this many seconds; cannot interrupt an in-flight API request")
     parser.add_argument("--max-tokens", type=int, default=None, help="Cap the model's maximum output tokens per request (OpenAI-compatible providers only; omit to leave unset)")
+    parser.add_argument("--judge-id", default=None, help="Identity of the review judge attached to this run (recorded in reproduction attributes)")
+    parser.add_argument("--judge-hash", default=None, help="SHA-256 of the review judge command/config (recorded in reproduction attributes)")
+    parser.add_argument("--require-ready", action="store_true",
+                        help="Fail closed unless a benign real-forward smoke confirms readiness")
+    parser.add_argument("--preflight-only", action="store_true",
+                        help="Run the typed preflight and write its receipt without running cases")
+    parser.add_argument("--preflight-output", default=None,
+                        help="Optional JSON path for the preflight receipt (evidence)")
     args = parser.parse_args(argv)
     if args.list:
         for case in CASES:
@@ -97,7 +109,43 @@ def main(argv=None):
         args.campaign = True
         args.variants = 6
     try:
+        measured = {
+            "provider": args.provider,
+            "model": args.model,
+            "case_set_hashes": case_set_hashes(),
+        }
+        if args.max_tokens is not None and args.provider in ("openai-compatible", *PRESET_BASE_URLS.keys()):
+            measured["max_tokens"] = args.max_tokens
+        if args.judge_id:
+            measured["judge_id"] = args.judge_id
+        if args.judge_hash:
+            measured["judge_hash"] = args.judge_hash
+        not_measured = []
+        if args.max_tokens is not None and "max_tokens" not in measured:
+            not_measured.append(not_measured_entry(
+                "max_tokens", "hosted provider adapter does not transmit max_tokens"
+            ))
+        run_config = RunConfig(**measured, not_measured=not_measured)
         adapter = _adapter(args.provider, args.model, args.base_url, args.api_key_env, max_tokens=args.max_tokens)
+        if args.require_ready or args.preflight_only:
+            receipt = preflight(
+                adapter, provider=args.provider, model=args.model,
+                base_url=args.base_url,
+                config={"provider": args.provider, "model": args.model,
+                        "base_url_fingerprint": fingerprint_endpoint(args.base_url),
+                        "max_tokens": args.max_tokens},
+            )
+            if args.preflight_output:
+                dest = Path(args.preflight_output)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(json.dumps(receipt, indent=2, ensure_ascii=False) + "\n",
+                                encoding="utf-8")
+            print(json.dumps(receipt, indent=2, ensure_ascii=False))
+            if args.preflight_only:
+                return 0 if receipt["state"] == "ready" else 2
+            if receipt["state"] != "ready":
+                print(f"preflight blocked the run: state={receipt['state']}", file=sys.stderr)
+                return 2
         if args.campaign:
             report = run_campaign(
                 adapter, provider=args.provider, model=args.model,
@@ -105,8 +153,13 @@ def main(argv=None):
                 adaptive=not args.no_adaptive, delay_seconds=args.delay,
                 max_seconds=args.max_seconds, case_ids=selected_case_ids,
             )
+            report.setdefault("provenance", {}).update(run_config.evidence_block())
         else:
-            report = run_suite(adapter, provider=args.provider, model=args.model, case_ids=selected_case_ids, delay_seconds=args.delay)
+            report = run_suite(
+                adapter, provider=args.provider, model=args.model,
+                case_ids=selected_case_ids, delay_seconds=args.delay,
+                run_config=run_config, base_url=args.base_url,
+            )
         write_report(report, args.output)
         if args.registry:
             saved = save_candidate_records(report, args.output, Path(args.registry))

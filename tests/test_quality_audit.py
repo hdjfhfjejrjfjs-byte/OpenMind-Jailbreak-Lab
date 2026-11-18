@@ -7,6 +7,24 @@ from src.quality_audit import audit, audit_file
 
 
 class QualityAuditTests(unittest.TestCase):
+    def test_shipped_v080_dataset_passes_audit_cleanly(self):
+        dataset = Path("data/benchmark_v0.8.0.jsonl")
+        if not dataset.exists():
+            self.skipTest("benchmark data file is not included in this source-only patch bundle")
+        result = audit_file(dataset)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["warnings"], [])
+        self.assertEqual(result["errors"], [])
+
+    def test_shipped_v070_dataset_passes_audit_cleanly(self):
+        dataset = Path("data/benchmark_v0.7.0.jsonl")
+        if not dataset.exists():
+            self.skipTest("benchmark data file is not included in this source-only patch bundle")
+        result = audit_file(dataset)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["warnings"], [])
+        self.assertEqual(result["errors"], [])
+
     def test_reports_benign_family_concentration(self):
         rows = [
             {"id": "OM-001", "split": "adversarial", "family": "injection", "user_prompt": "A"},

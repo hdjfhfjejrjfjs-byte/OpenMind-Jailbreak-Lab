@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "pairs": [
+    {
+      "twin_id": "OM-076",
+      "source_id": "OM-067"
+    },
+    {
+      "twin_id": "OM-077",
+      "source_id": "OM-068"
+    },
+    {
+      "twin_id": "OM-078",
+      "source_id": "OM-069"
+    },
+    {
+      "twin_id": "OM-079",
+      "source_id": "OM-070"
+    },
+    {
+      "twin_id": "OM-080",
+      "source_id": "OM-071"
+    },
+    {
+      "twin_id": "OM-081",
+      "source_id": "OM-072"
+    }
+  ],
+  "note": "Research-purposes-only: matched benign twins share frame, surface and keywords with the source adversarial row; only the injected instruction is replaced by a harmless task."
+}

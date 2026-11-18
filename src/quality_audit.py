@@ -106,7 +106,7 @@ def audit_file(path):
 
 
 if __name__ == "__main__":
-    target = sys.argv[1] if len(sys.argv) > 1 else "data/benchmark_v0.6.1.jsonl"
+    target = sys.argv[1] if len(sys.argv) > 1 else "data/benchmark_v0.8.0.jsonl"
     result = audit_file(target)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     sys.exit(1 if result["status"] == "fail" else 0)

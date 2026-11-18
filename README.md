@@ -22,7 +22,7 @@ OpenMind combines bounded adversarial tests, provider-backed scanning, benchmark
 - **Guardrail Lab:** 76 runnable cases (24 core and 52 source-derived safe adaptations), provider adapters, bounded campaigns, JSON reports, and a findings registry.
 - **Original Source Corpus:** separate metadata-only browser for authentic archive records, source paths, sizes, hashes, and manual review. Original raw prompts are not sent to the Guardrail Lab runner.
 - **AI Scanner:** [provider-backed checks and response evidence](modules/ai_scanner/README.md).
-- **OpenMind Benchmark:** [versioned evaluation set](SCORING.md); current file: [benchmark_v0.6.1.jsonl](data/benchmark_v0.6.1.jsonl) (66 cases).
+- **OpenMind Benchmark:** [versioned evaluation set](SCORING.md); current file: [benchmark_v0.8.0.jsonl](data/benchmark_v0.8.0.jsonl) (81 cases, incl. 6 matched benign twins).
 - **JB-002:** [manual finding records and validation](modules/jb002/README.md).
 
 The optional `--research-mode` runs six reviewed framings with evidence-triggered follow-ups within the configured budget. It is for authorized testing and evidence collection; it does not create unrestricted harmful bypasses or execute model-generated tool instructions.
@@ -99,13 +99,13 @@ Test only systems you own or are authorized to assess. Follow provider terms, ra
 
 ## Documentation
 
-[Installation](INSTALLATION.md) · [Guardrail Lab](modules/guardrail_lab/README.md) · [Original Source Corpus](modules/original_source_corpus/README.md) · [Provider matrix](modules/guardrail_lab/PROVIDER_MATRIX.md) · [Discovery engine](modules/guardrail_lab/DISCOVERY_ENGINE.md) · [Registry](modules/guardrail_lab/REGISTRY.md) · [Archive import](modules/guardrail_lab/EXTERNAL_ARCHIVE_IMPORT.md) · [Methodology](METHODOLOGY.md) · [Release checklist](RELEASE_CHECKLIST.md) · [Release status](RELEASE_STATUS.md)
+[Installation](INSTALLATION.md) · [Guardrail Lab](modules/guardrail_lab/README.md) · [Original Source Corpus](modules/original_source_corpus/README.md) · [Provider matrix](modules/guardrail_lab/PROVIDER_MATRIX.md) · [Discovery engine](modules/guardrail_lab/DISCOVERY_ENGINE.md) · [Registry](modules/guardrail_lab/REGISTRY.md) · [Archive import](modules/guardrail_lab/EXTERNAL_ARCHIVE_IMPORT.md) · [Research contributions](RESEARCH_CONTRIBUTIONS.md) · [Methodology](METHODOLOGY.md) · [Release checklist](RELEASE_CHECKLIST.md) · [Release status](RELEASE_STATUS.md)
 
 ## Quality checks
 
 ```bash
 python -m unittest discover -s tests -v
-python -m src.quality_audit data/benchmark_v0.6.1.jsonl
+python -m src.quality_audit data/benchmark_v0.8.0.jsonl
 python -m modules.guardrail_lab.compare \
   reports/gemini.json reports/openai.json \
   --output reports/comparison.json

@@ -5,14 +5,29 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-STATUSES = {"unverified", "intermittent", "confirmed", "rejected"}
+STATUSES = {
+    "unverified", "intermittent", "confirmed", "rejected",
+    # Negative evidence is preserved as typed, append-only records. Old rows
+    # are never rewritten: a supersession adds a new row that points back.
+    "superseded", "not_reproduced", "not_measured",
+}
 REQUIRED = ("finding_id", "title", "provider", "model", "category", "status", "discovered_at", "evidence_ref", "summary")
+
+def _text(item, key):
+    value = item.get(key)
+    return isinstance(value, str) and bool(value.strip())
 
 def _hash(value: dict[str, Any]) -> str:
     raw = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
-def validate_finding(item: dict[str, Any], allow_confirmed: bool = False) -> dict[str, Any]:
+def validate_finding(item: dict[str, Any], allow_confirmed: bool = False,
+                     known_ids=None) -> dict[str, Any]:
+    """Validate a finding. ``known_ids`` enables supersession chain checks.
+
+    Append-only discipline: superseded records are new rows that reference
+    the original and its replacement; no existing row is ever modified.
+    """
     if not isinstance(item, dict):
         raise ValueError("finding must be a JSON object")
     missing = [k for k in REQUIRED if not isinstance(item.get(k), str) or not item[k].strip()]
@@ -33,16 +48,36 @@ def validate_finding(item: dict[str, Any], allow_confirmed: bool = False) -> dic
             raise ValueError("confirmed findings require assessment=potential_guardrail_failure")
         if item.get("reproducible") is not True:
             raise ValueError("confirmed findings require reproducible=true")
+    if item["status"] == "superseded":
+        if not _text(item, "supersedes") or not _text(item, "superseded_by"):
+            raise ValueError("superseded findings require supersedes and superseded_by")
+        if item["supersedes"] == item["superseded_by"]:
+            raise ValueError("a finding cannot be superseded by itself")
+        if known_ids is not None and item["supersedes"] not in known_ids:
+            raise ValueError("supersedes references a finding_id not in the registry")
+        if known_ids is not None and item["superseded_by"] not in known_ids:
+            raise ValueError("superseded_by references a finding_id not in the registry")
+    if item["status"] == "not_reproduced":
+        runs, successes = item.get("repeat_runs"), item.get("repeat_successes")
+        if (isinstance(runs, bool) or not isinstance(runs, int) or runs < 2
+            or isinstance(successes, bool) or not isinstance(successes, int)
+            or not 0 <= successes <= runs):
+            raise ValueError("not_reproduced findings require repeat_runs >= 2 and 0 <= repeat_successes <= repeat_runs")
+        if successes >= 2:
+            raise ValueError("not_reproduced requires fewer than two successful repeats")
+    if item["status"] == "not_measured" and not _text(item, "not_measured_reason"):
+        raise ValueError("not_measured findings require a not_measured_reason")
     row = dict(item)
     row.setdefault("created_at", datetime.now(timezone.utc).isoformat())
     row["record_sha256"] = _hash({k:v for k,v in row.items() if k != "record_sha256"})
     return row
 
 def add_finding(registry: Path, item: dict[str, Any], allow_confirmed: bool = False) -> dict[str, Any]:
-    row = validate_finding(item, allow_confirmed)
-    registry.parent.mkdir(parents=True, exist_ok=True)
     existing = load_registry(registry)
-    if any(x.get("finding_id") == row["finding_id"] for x in existing):
+    known_ids = {row.get("finding_id") for row in existing}
+    row = validate_finding(item, allow_confirmed, known_ids=known_ids)
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    if row["finding_id"] in known_ids:
         raise ValueError("finding_id already exists: " + row["finding_id"])
     with registry.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
@@ -62,6 +97,42 @@ def load_registry(registry: Path) -> list[dict[str, Any]]:
                 raise ValueError(f"registry integrity check failed on line {n}")
             rows.append(row)
     return rows
+
+def record_supersession(registry: Path, original_id: str, replacement_id: str,
+                        reason: str, *, discovered_at: str | None = None) -> dict[str, Any]:
+    """Append a typed supersession record; never modify the original row.
+
+    The replacement must already exist in the registry, so the chain always
+    resolves to a real record. Failures are preserved as negative evidence.
+    """
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError("supersession requires a reason")
+    rows = load_registry(registry)
+    by_id = {row.get("finding_id"): row for row in rows}
+    if original_id not in by_id:
+        raise ValueError("original finding_id is not in the registry")
+    if replacement_id not in by_id:
+        raise ValueError("replacement finding_id is not in the registry")
+    original = by_id[original_id]
+    suffix = 1
+    while f"{original_id}-SUP-{suffix}" in by_id:
+        suffix += 1
+    record = {
+        "finding_id": f"{original_id}-SUP-{suffix}",
+        "title": f"Supersession record for {original_id}",
+        "provider": original["provider"],
+        "model": original["model"],
+        "category": original["category"],
+        "status": "superseded",
+        "discovered_at": discovered_at or datetime.now(timezone.utc).isoformat(),
+        "evidence_ref": original["evidence_ref"],
+        "summary": "Original conclusion superseded; original row preserved verbatim.",
+        "supersedes": original_id,
+        "superseded_by": replacement_id,
+        "supersession_reason": reason,
+    }
+    return add_finding(registry, record)
+
 
 def save_candidate_records(report: dict[str, Any], evidence_path: str, registry: Path) -> list[dict[str, Any]]:
     """Persist exact canary-only signals as unverified; never auto-confirm them."""
@@ -120,6 +191,24 @@ def export_markdown(rows: list[dict[str, Any]], destination: Path) -> None:
         if r.get("reproduction_steps"): lines += ["Reproduction notes:", "", r["reproduction_steps"], ""]
         if r.get("repeat_runs") is not None:
             lines += [f"Repeatability: {r.get('repeat_successes', 0)}/{r['repeat_runs']} runs", ""]
+        if r["status"] == "superseded":
+            lines += [
+                "Supersession chain (append-only; original row preserved):", "",
+                f"- Supersedes: {r.get('supersedes', 'not supplied')}",
+                f"- Superseded by: {r.get('superseded_by', 'not supplied')}",
+                f"- Reason: {r.get('supersession_reason', 'not supplied')}", "",
+            ]
+        elif r["status"] == "not_reproduced":
+            lines += [
+                f"Not reproduced: {r.get('repeat_successes', 0)}/"
+                f"{r.get('repeat_runs', 0)} repeat runs succeeded. "
+                "Negative evidence preserved; not a confirmed failure.", "",
+            ]
+        elif r["status"] == "not_measured":
+            lines += [
+                f"Not measured: {r.get('not_measured_reason', 'not supplied')}. "
+                "Unknown, not a pass.", "",
+            ]
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 

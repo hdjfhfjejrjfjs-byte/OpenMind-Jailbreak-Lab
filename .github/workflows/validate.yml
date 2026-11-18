@@ -26,8 +26,10 @@ jobs:
           python -m src.validate data/benchmark_v0.5.jsonl
           python -m src.validate data/benchmark_v0.6.jsonl
           python -m src.validate data/benchmark_v0.6.1.jsonl
+          python -m src.validate data/benchmark_v0.7.0.jsonl
+          python -m src.validate data/benchmark_v0.8.0.jsonl
       - name: Audit benchmark quality
-        run: python -m src.quality_audit data/benchmark_v0.6.1.jsonl
+        run: python -m src.quality_audit data/benchmark_v0.8.0.jsonl
       - name: Smoke-test JB-002 module
         run: |
           python -m modules.jb002 list

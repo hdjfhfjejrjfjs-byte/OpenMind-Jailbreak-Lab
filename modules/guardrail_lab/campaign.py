@@ -2,9 +2,17 @@
 
 This scheduler explores robustness variations; it does not generate instructions
 for secret extraction, harmful activity, or unauthorized safeguard evasion.
+
+Research-purposes-only. The frame/shape metadata added here is a controlled,
+non-adaptive measurement axis: neutral operator framings over the repository's
+own inert canaries. Persona, authority-override, and adaptive frame-search
+designs are explicitly excluded; the trusted system instruction stays
+constant and decoding is pinned by the caller.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import time
 from dataclasses import replace
@@ -50,6 +58,29 @@ VARIANTS = (
 )
 
 
+# Neutral operator framings, held fixed for the whole campaign. No persona,
+# no authority-override, no red-line holdout material, no adaptive search.
+FRAME_VARIANTS = (
+    "direct",
+    "analytical_information_request",
+    "domain_brief",
+)
+SHAPE_VARIANTS = ("action", "information")
+FRAME_SET_HASH = hashlib.sha256(json.dumps(
+    {"frames": FRAME_VARIANTS, "shapes": SHAPE_VARIANTS},
+    sort_keys=True, separators=(",", ":"),
+).encode("utf-8")).hexdigest()
+
+
+def _frame_annotation(index, shape_variant=None):
+    """Deterministic, non-adaptive annotation of one result."""
+    return {
+        "frame_variant": FRAME_VARIANTS[index % len(FRAME_VARIANTS)],
+        "shape_variant": shape_variant or SHAPE_VARIANTS[(index // len(FRAME_VARIANTS)) % len(SHAPE_VARIANTS)],
+        "frame_set_hash": FRAME_SET_HASH,
+    }
+
+
 def _is_terminal_access_block(record):
     """Stop a campaign when the provider permanently blocks access."""
     error = record.get("error") or {}
@@ -81,7 +112,14 @@ def run_campaign(
     delay_seconds: float = 0.0,
     max_seconds: Optional[float] = None,
     case_ids: Optional[List[str]] = None,
+    frame_variant: Optional[str] = None,
+    shape_variant: Optional[str] = None,
+    annotate_frames: bool = True,
 ) -> Dict:
+    if frame_variant is not None and frame_variant not in FRAME_VARIANTS:
+        raise ValueError(f"frame_variant must be one of {FRAME_VARIANTS}")
+    if shape_variant is not None and shape_variant not in SHAPE_VARIANTS:
+        raise ValueError(f"shape_variant must be one of {SHAPE_VARIANTS}")
     if (isinstance(budget, bool) or not isinstance(budget, int)
             or budget < 1 or budget > 1000):
         raise ValueError("budget must be an integer between 1 and 1000")
@@ -126,6 +164,17 @@ def run_campaign(
             ]
         record["variant"] = variant_name
         record["attempt"] = len(results) + 1
+        if annotate_frames:
+            record.update(_frame_annotation(
+                len(results),
+                shape_variant=shape_variant or (
+                    frame_variant and SHAPE_VARIANTS[0]
+                ),
+            ))
+            if frame_variant is not None:
+                record["frame_variant"] = frame_variant
+            if shape_variant is not None:
+                record["shape_variant"] = shape_variant
         results.append(record)
 
         # Circuit breaker: do not continue sending requests after a
@@ -167,6 +216,10 @@ def run_campaign(
             "attempts": len(results),
             "variants_per_case_max": variants,
             "adaptive": adaptive,
+            "frame_variants": FRAME_VARIANTS,
+            "shape_variants": SHAPE_VARIANTS,
+            "frame_set_hash": FRAME_SET_HASH,
+            "frame_design": "controlled, neutral, non-adaptive, frozen decoding; INFERRED/UNTESTED transfer from frame-sensitivity observations on a different checkpoint",
             "delay_seconds": delay_seconds,
             "max_seconds": max_seconds,
             "elapsed_seconds": elapsed,

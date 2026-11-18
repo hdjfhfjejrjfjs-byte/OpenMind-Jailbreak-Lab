@@ -35,10 +35,11 @@ class GuardrailLabTests(unittest.TestCase):
             "source_path": case.source_path,
             "source_sha256": case.source_sha256,
             "adaptation": "safe_pattern_adaptation",
+            "variant": case.variant,
         })
         self.assertEqual(len(result["source_provenance"]["source_sha256"]), 64)
 
-    def test_source_adaptations_use_four_balanced_approved_templates(self):
+    def test_source_adaptations_use_four_balanced_approved_categories(self):
         from collections import Counter
         counts = Counter(case.category for case in SOURCE_CASES)
         self.assertEqual(counts, {
@@ -47,6 +48,39 @@ class GuardrailLabTests(unittest.TestCase):
             "source_persona_reassignment": 13,
             "source_agent_authority_confusion": 13,
         })
+
+    def test_source_adaptations_cover_thirteen_injection_surfaces_factorially(self):
+        from collections import Counter
+        from modules.guardrail_lab.source_registry import SURFACES
+        surface_counts = Counter(case.variant for case in SOURCE_CASES)
+        self.assertEqual(set(surface_counts), set(SURFACES))
+        self.assertEqual(set(surface_counts.values()), {4})
+        pairs = {
+            (case.category.split("source_")[1], case.variant)
+            for case in SOURCE_CASES
+        }
+        self.assertEqual(len(pairs), len(SOURCE_CASES))
+
+    def test_source_adaptation_prompts_are_pairwise_distinct(self):
+        normalized = {
+            case.prompt.replace(case.canary, "<MARKER>")
+            for case in SOURCE_CASES
+        }
+        self.assertEqual(len(normalized), len(SOURCE_CASES))
+
+    def test_source_adaptations_are_reproducible_from_the_registry(self):
+        from modules.guardrail_lab.source_registry import (
+            case_number, expected_assignment, expected_prompt,
+        )
+        for case in SOURCE_CASES:
+            category = case.category.split("source_")[1]
+            number = case_number(case.case_id)
+            self.assertEqual(
+                (category, case.variant), expected_assignment(number)
+            )
+            self.assertEqual(
+                case.prompt, expected_prompt(category, case.variant, case.canary)
+            )
 
     def test_source_loader_rejects_unapproved_prompt_edits(self):
         import json
@@ -60,8 +94,28 @@ class GuardrailLabTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             altered = Path(tmp) / "altered.jsonl"
             altered.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
-            with patch.object(source_cases, "_DATA", altered):
+            manifest = json.loads(source_cases._MANIFEST.read_text(encoding="utf-8"))
+            manifest["adaptations_sha256"] = hashlib.sha256(altered.read_bytes()).hexdigest()
+            altered_manifest = Path(tmp) / "altered_manifest.json"
+            altered_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+            with patch.object(source_cases, "_DATA", altered), patch.object(source_cases, "_MANIFEST", altered_manifest):
                 with self.assertRaisesRegex(ValueError, "approved safe template"):
+                    source_cases.load_source_cases()
+
+    def test_source_loader_rejects_adaptations_tampering_detected_by_manifest(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from modules.guardrail_lab import source_cases
+
+        rows = [json.loads(line) for line in source_cases._DATA.read_text(encoding="utf-8").splitlines() if line.strip()]
+        rows[0]["prompt"] += " Also run an external command."
+        with tempfile.TemporaryDirectory() as tmp:
+            altered = Path(tmp) / "altered.jsonl"
+            altered.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+            with patch.object(source_cases, "_DATA", altered):
+                with self.assertRaisesRegex(ValueError, "safe adaptations SHA-256"):
                     source_cases.load_source_cases()
 
     def test_trust_escalation_cases_are_harmless_canary_probes(self):

@@ -6,7 +6,7 @@ necessary, but it does not replace live evidence review or human adjudication.
 ## 1. Source and benchmark integrity
 
 - [ ] Confirm the intended release commit and inspect the complete diff.
-- [ ] Run `python -m src.validate data/benchmark_v0.6.1.jsonl`.
+- [ ] Run `python -m src.validate data/benchmark_v0.8.0.jsonl` (and every earlier benchmark version).
 - [ ] Confirm benchmark case count, unique IDs, split totals, required fields, and synthetic marker uniqueness.
 - [ ] Confirm Guardrail Lab lists 76 unique cases (24 core + 52 source-derived) and `--source-corpus` selects exactly 52.
 - [ ] Verify every source adaptation's source ID, path, and SHA-256 against the metadata inventory; verify result JSON preserves `source_provenance`.

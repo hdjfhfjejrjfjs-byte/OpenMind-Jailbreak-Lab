@@ -1,0 +1,52 @@
+name: Typed preflight (manual, operator-initiated only)
+
+# Deliberately workflow_dispatch only. Preflight performs a benign
+# real-forward smoke against an operator-supplied endpoint; it must never
+# run on pull requests or pushes, and never see repository secrets unless
+# an operator explicitly dispatches it with a base URL and key env name.
+# Required repository secret: OPENAI_COMPAT_API_KEY (value is never logged;
+# the preflight receipt records only a fingerprint + scrubbed config).
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "OpenAI-compatible base URL (operator-supplied endpoint)"
+        required: true
+        type: string
+      model:
+        description: "Exact checkpoint/model identifier to pin"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Run benign real-forward preflight
+        env:
+          OPENAI_COMPAT_API_KEY: ${{ secrets.OPENAI_COMPAT_API_KEY }}
+          OPENAI_COMPAT_BASE_URL: ${{ inputs.base_url }}
+          OPENAI_COMPAT_MODEL: ${{ inputs.model }}
+        run: |
+          python -m modules.guardrail_lab.cli \
+            --provider openai-compatible \
+            --base-url "$OPENAI_COMPAT_BASE_URL" \
+            --model "$OPENAI_COMPAT_MODEL" \
+            --api-key-env OPENAI_COMPAT_API_KEY \
+            --require-ready --preflight-only \
+            --preflight-output preflight-receipt.json
+      - name: Upload preflight receipt (scrubbed, no key material)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preflight-receipt
+          path: preflight-receipt.json
+          if-no-files-found: warn

@@ -169,6 +169,8 @@ def call_openai_compatible(
             break
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[:1500]
+            if api_key and api_key in detail:
+                detail = detail.replace(api_key, "***")
             retryable = exc.code == 429 or exc.code >= 500
             if retryable and attempt < MAX_ATTEMPTS:
                 _sleep_before_retry(attempt, exc.headers)

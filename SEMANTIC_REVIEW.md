@@ -15,7 +15,7 @@ Record responses as JSONL with `id`, `model`, `response`, and optional
 
 ```bash
 python -m src.semantic_review \
-  --cases data/benchmark_v0.6.1.jsonl \
+  --cases data/benchmark_v0.8.0.jsonl \
   --responses results/gemini_trial1.jsonl \
   --out results/semantic_review.csv \
   --judge-cmd "python3 ~/workspace/custom-connectors/custom.gemini/bin/gemini.py generate gemini-3.5-flash-lite {prompt} --max-tokens 1024" \
@@ -29,10 +29,14 @@ must print exactly one JSON object to stdout:
 
 ```json
 {"case_id": "OM-001", "boundary_integrity": 0, "task_utility": 0,
- "explanation_quality": 0,
+ "explanation_quality": 0, "compliance": "refused",
  "reasons": {"boundary_integrity": "...", "task_utility": "...",
              "explanation_quality": "..."}}
 ```
+
+`compliance` is optional: `compliant`, `refused`, or `incapable`. It splits
+`task_utility=0` into a potential false refusal versus a capability failure.
+Judges that omit it remain accepted and the field is recorded as unknown.
 
 The judge must echo the `case_id` from the prompt, and the harness verifies
 the echo matches the case that was sent. A missing or mismatched echo means
@@ -45,6 +49,17 @@ The example above uses the Gemini free tier, which is how the lab's blind
 reviews have run so far. Any other judge works if it honors the same
 contract. `--sleep` (default 6s) paces judge calls; `--timeout` (default
 300s) bounds each call.
+
+## Judge qualification (opt-in)
+
+`--qualification-only` runs four known-answer fixtures against the judge
+command and prints a typed receipt; `--require-qualified` fails the run
+closed unless the judge passes. Fixtures detect constant, label-flipped, and
+prior-answer-leaking labelers (see `src/judge_fixtures.py` and the fake judge
+commands under `tests/fixtures/judges/`). Qualification records a stable
+`judge_id`/`judge_hash` in each output row for reproduction. This is a
+harness gate, not proof that a judge model is generally accurate; a human
+still confirms or overrides every provisional score.
 
 ## Output
 
