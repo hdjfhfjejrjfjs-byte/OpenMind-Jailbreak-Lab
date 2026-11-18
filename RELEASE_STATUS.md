@@ -9,20 +9,20 @@ This file records what has been verified on the current repository revision and 
 Repository branch: `main`
 
 Code and workflow verification commits:
-Validate benchmark on `5ac4cc4`; provider matrix on `ea23356` (contains all Python changes in this release; later commits are documentation-only).
+Validate benchmark on `bb601ef`; provider matrix on `bb601ef` (contains all Python changes in this release; later commits are documentation-only).
 
 GitHub Actions results:
 
 | Workflow | Run | Result |
 |---|---:|---|
-| Validate benchmark | [44165854106](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44165854106) | Success |
-| Provider adapter regression matrix | [44164686055](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44164686055) | Success |
+| Validate benchmark | [44222085189](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44222085189) | Success |
+| Provider adapter regression matrix | [44222085147](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44222085147) | Success |
 
-Both workflows passed on Python 3.10, 3.11, and 3.12. Validation compiled all Python source and test files, validated benchmark versions 0.3 through 0.6.1, ran the benchmark quality audit, smoke-tested JB-002, AI Scanner, Guardrail Lab, and the original source corpus browser, and ran the full unit-test suite (334 tests). The provider matrix passed its complete offline regression suite on all three Python versions.
+Both workflows passed on Python 3.10, 3.11, and 3.12. Validation compiled all Python source and test files, validated benchmark versions 0.3 through 0.8.0, ran the benchmark quality audit (v0.7.0 and v0.8.0 both `pass`, zero warnings), smoke-tested JB-002, AI Scanner, Guardrail Lab, and the original source corpus browser, and ran the full unit-test suite (417 tests). The provider matrix passed its complete offline regression suite on all three Python versions.
 
 ## Guardrail Lab source-corpus integration
 
-The Guardrail Lab now contains 76 registered cases: 24 core cases and 52 source-derived safe adaptations (`GL-SRC-001`–`GL-SRC-052`). The raw uploaded archive remains a metadata-only inventory; original prompt bodies are not redistributed or executed.
+The Guardrail Lab now contains 76 registered cases: 24 core cases and 52 source-derived safe adaptations (`GL-SRC-001`–`GL-SRC-052`). The 52 adaptations are now a 4-category × 13-surface factorial — 52 pairwise-distinct prompts, one per category×surface pair. The raw uploaded archive remains a metadata-only inventory; original prompt bodies are not redistributed or executed.
 
 The adaptation loader validates JSONL structure, safe framing, unique IDs and canaries, the inventory checksum, and every source ID/path/SHA-256 relationship. Per-case evidence reports include `source_provenance`. The CLI supports `--source-corpus`; the multi-provider Actions workflow supports `all` (76), `core` (24), and `source` (52) scopes in `full_suite` or bounded `campaign` mode. The dedicated Gemini full-suite workflow now validates all 76 cases.
 
@@ -30,8 +30,8 @@ The verification above is offline CI, not a live provider run. The updated manua
 
 ## Remaining before v1.0
 
-- [ ] Expand benign controls across multiple meaningful families.
-- [ ] Add additional cases for the singleton adversarial families, with observable expected behavior and matched benign controls.
+- [x] Expand benign controls across multiple meaningful families. (Done in v0.7.0: second benign family `benign_instruction_following`, 31 benign rows.)
+- [x] Add additional cases for the singleton adversarial families, with observable expected behavior and matched benign controls. (Done in v0.7.0: 2 cases each for `history_edit`, `cross_model_pipeline`, `hypothetical_framing`; matched twins in v0.8.0.)
 - [ ] Run the same frozen benchmark against at least Gemini, Claude, and OpenAI using authorized accounts; record exact model IDs, run dates, settings, raw evidence, and provider errors.
 - [ ] Repeat candidate failures and have a human review ambiguous or potential findings.
 - [ ] Confirm action versions and workflow permissions during the final release review.
@@ -49,11 +49,11 @@ Until the remaining items are completed, describe this repository as a validated
 
 ## Current main revision — 2026-11-17
 
-Latest observed main commit: `5ac4cc4` (source-corpus validation and review-template hardening docs; documentation-only).
+Latest observed main commit: `bb601ef` (merge of PR #3, research contributions; code).
 
-- [Validate benchmark — run 44165854106](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44165854106): **success** on the current main commit.
-- [Provider adapter regression matrix — run 44164686055](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44164686055): **success** on commit `ea23356`, which holds all Python changes in this release; commits after it are documentation-only.
-- The release-notes and release-status documentation now records the original source corpus browser, its loader hardening, and the manual review workspace.
+- [Validate benchmark — run 44222085189](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44222085189): **success** on the current main commit.
+- [Provider adapter regression matrix — run 44222085147](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44222085147): **success** on the current main commit.
+- The release-notes and release-status documentation now records the PR #3 research batch (benchmark v0.7.0/v0.8.0, source-corpus factorial, measurement contract, preflight, judge qualification, negative-evidence lifecycle, uncertainty display) and the 17 November AgentRouter re-test snapshot.
 
 The earlier code/workflow verification results listed above remain tied to their exact commit. Re-run the complete release validation workflow on the final release candidate before tagging.
 

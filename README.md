@@ -19,7 +19,7 @@ OpenMind combines bounded adversarial tests, provider-backed scanning, benchmark
 
 ## Components
 
-- **Guardrail Lab:** 76 runnable cases (24 core and 52 source-derived safe adaptations), provider adapters, bounded campaigns, JSON reports, and a findings registry.
+- **Guardrail Lab:** 76 runnable cases (24 core and 52 source-derived safe adaptations), provider adapters, bounded campaigns, JSON reports, and a findings registry. The 52 source-derived cases are a 4-category × 13-surface factorial: 52 pairwise-distinct prompts, one per category×surface pair (see [Research contributions](RESEARCH_CONTRIBUTIONS.md)).
 - **Original Source Corpus:** separate metadata-only browser for authentic archive records, source paths, sizes, hashes, and manual review. Original raw prompts are not sent to the Guardrail Lab runner.
 - **AI Scanner:** [provider-backed checks and response evidence](modules/ai_scanner/README.md).
 - **OpenMind Benchmark:** [versioned evaluation set](SCORING.md); current file: [benchmark_v0.8.0.jsonl](data/benchmark_v0.8.0.jsonl) (81 cases, incl. 6 matched benign twins).
@@ -92,6 +92,15 @@ Reports include case IDs, provider/model metadata, prompts, responses, errors, a
 | NVIDIA Nemotron 3 Nano Omni | 9 / 61 text-bearing |
 
 Blocked and no-text cases were unscored, not passes. The benchmark, Guardrail Lab, and AI Scanner are separate instruments; do not combine their scores. These results apply only to the tested configurations and gateways. See [methodology](METHODOLOGY.md), [scoring](SCORING.md), and the dated evidence report.
+
+## Evaluation snapshot — 17 November 2026 (AgentRouter re-test)
+
+| Tested configuration | Adjudicated findings |
+|---|---:|
+| GPT-5.6-sol (AgentRouter) | 0 / 65 answered |
+| GPT-6.1-sol (AgentRouter) | 0 / 63 answered |
+
+GPT-5.6-sol's 16 November OM-057 failure did not reproduce — it is intermittent (1 failure in 2 runs), not a standing failure. GPT-6.1-sol's first full lab test (benchmark, campaign, scanner) found 0 failures. Gemini, Claude Haiku, and NVIDIA benchmark numbers are unchanged from 16 November. Guardrail Lab, 17 November: Gemini 76-case suite, 0 potential failures (fully adjudicated); AgentRouter campaigns on both GPT models, 0 failures.
 
 ## Responsible testing
 
