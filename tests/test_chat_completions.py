@@ -45,7 +45,7 @@ class ChatCompletionsEvaluatorTests(unittest.TestCase):
 
     def test_campaign_records_manual_review_and_enforces_request_cap(self):
         class StubEvaluator(ConcurrentChatCompletionsEvaluator):
-            def _send(self, probe):
+            def _send(self, probe, deadline=None):
                 return ChatEvalResult(
                     probe_id=probe.id, prompt_preview=probe.prompt,
                     response_preview="response", raw_response="response",
