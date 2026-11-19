@@ -61,6 +61,10 @@ class ProviderEvaluationPipeline:
                   max_mutations_per_probe: int = 16) -> EvaluationResult:
         if mutation_profile not in (None, "robustness"):
             raise ValueError("mutation_profile must be None or 'robustness'")
+        if max_tokens < 1:
+            raise ValueError("max_tokens must be positive")
+        if bool(provider_name) != bool(model):
+            raise ValueError("provider_name and model must be supplied together")
         evaluated = list(probes)
         mutation_cases: list[dict[str, Any]] = []
         if mutation_profile == "robustness":
@@ -90,9 +94,12 @@ class ProviderEvaluationPipeline:
             async def inspect(probe: Probe) -> ProviderResult:
                 async with semaphore:
                     try:
+                        messages = []
+                        if probe.system is not None:
+                            messages.append({"role": "system", "content": probe.system})
+                        messages.append({"role": "user", "content": probe.prompt})
                         completion = await provider.complete(
-                            model, [{"role": "user", "content": probe.prompt}],
-                            max_tokens=max_tokens,
+                            model, messages, max_tokens=max_tokens,
                         )
                         return ProviderResult(probe.id, provider_name, model,
                                               completion.text, completion.input_tokens,
