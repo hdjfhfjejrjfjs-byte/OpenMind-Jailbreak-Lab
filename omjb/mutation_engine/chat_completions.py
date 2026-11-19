@@ -76,6 +76,8 @@ def parse_provider_spec(value: str) -> ProviderSpec:
 
 def build_provider(spec: ProviderSpec, *, base_url: str | None = None,
                    api_key_env: str | None = None, timeout: float = 60.0) -> Target:
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("timeout must be finite and positive")
     if spec.name == "openai-compatible" and not base_url:
         raise ValueError("openai-compatible requires --base-url")
     target = target_from_env(spec.name, spec.model, base_url, api_key_env)
@@ -185,6 +187,7 @@ class MultiProviderEvaluator:
         started = time.monotonic()
         deadline = started + self.max_seconds
         results: list[MultiProviderEvalResult] = []
+        processed = set()
         timed_out = False
         with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
             futures = {
@@ -195,21 +198,28 @@ class MultiProviderEvaluator:
             try:
                 for future in as_completed(futures, timeout=self.max_seconds):
                     results.append(future.result())
+                    processed.add(future)
             except FuturesTimeout:
                 timed_out = True
                 for future in futures:
                     if not future.done():
                         future.cancel()
-                for future, (target, probe) in futures.items():
-                    if future.cancelled():
-                        results.append(MultiProviderEvalResult(
-                            probe_id=probe.id, provider=target.name,
-                            model=getattr(target, "model", ""),
-                            prompt_preview=_preview(probe.prompt, 150),
-                            response_preview="", raw_response="", latency_ms=0,
-                            refusal_signal=None, assessment="inconclusive",
-                            error="campaign wall-clock budget exhausted",
-                        ))
+            for future, (target, probe) in futures.items():
+                if future in processed:
+                    continue
+                if future.cancelled():
+                    results.append(MultiProviderEvalResult(
+                        probe_id=probe.id, provider=target.name,
+                        model=getattr(target, "model", ""),
+                        prompt_preview=_preview(probe.prompt, 150),
+                        response_preview="", raw_response="", latency_ms=0,
+                        refusal_signal=None, assessment="inconclusive",
+                        error="campaign wall-clock budget exhausted",
+                    ))
+                elif future.done():
+                    # Preserve requests completed during executor shutdown even
+                    # when they finished just after the as_completed deadline.
+                    results.append(future.result())
         results.sort(key=lambda item: (item.provider, item.model, item.probe_id))
         output = {
             "schema_version": 2,
@@ -222,7 +232,8 @@ class MultiProviderEvaluator:
             "human_review_required": sum(item.assessment == "manual_review" for item in results),
             "timed_out": timed_out,
             "elapsed_ms": int((time.monotonic() - started) * 1000),
-            "estimated_cost_usd": round(len(results) * self.estimated_request_cost, 8),
+            "estimated_cost_usd": round(len(selected) * self.estimated_request_cost, 8),
+            "scheduled_requests": len(selected),
             "results": [asdict(item) for item in results],
             "interpretation": (
                 "Refusal phrase matches are heuristic triage only. A missing refusal phrase "
