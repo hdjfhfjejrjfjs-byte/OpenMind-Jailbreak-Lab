@@ -95,8 +95,8 @@ class ConcurrentChatCompletionsEvaluator:
             raise ValueError("temperature must be finite and between 0 and 2")
         if not isinstance(model, str) or not model.strip():
             raise ValueError("model must be a non-empty string")
-        if max_usd == 0 and estimated_request_cost > 0:
-            raise ValueError("a positive request estimate requires a positive max_usd budget")
+        if (max_usd == 0) != (estimated_request_cost == 0):
+            raise ValueError("use both max_usd and estimated_request_cost as zero for a free/local endpoint, or set both to positive values")
         self.url = _validate_endpoint(endpoint)
         parsed_endpoint = urlparse(self.url)
         self.endpoint_label = f"{parsed_endpoint.scheme}://{parsed_endpoint.hostname}" + (f":{parsed_endpoint.port}" if parsed_endpoint.port else "") + parsed_endpoint.path
@@ -124,7 +124,7 @@ class ConcurrentChatCompletionsEvaluator:
             selected.append(probe)
         return selected
 
-    def _send(self, probe: Probe) -> ChatEvalResult:
+    def _send(self, probe: Probe, deadline: float | None = None) -> ChatEvalResult:
         started = time.monotonic()
         prompt = probe.prompt
         try:
@@ -141,7 +141,10 @@ class ConcurrentChatCompletionsEvaluator:
                 "temperature": self.temperature,
                 "max_tokens": self.max_tokens,
             }
-            response = httpx.post(self.url, headers=headers, json=body, timeout=self.timeout)
+            remaining = self.timeout if deadline is None else min(self.timeout, deadline - time.monotonic())
+            if remaining <= 0:
+                raise TimeoutError("campaign wall-clock budget exhausted before request start")
+            response = httpx.post(self.url, headers=headers, json=body, timeout=remaining)
             latency = int((time.monotonic() - started) * 1000)
             response.raise_for_status()
             data = response.json()
@@ -179,8 +182,9 @@ class ConcurrentChatCompletionsEvaluator:
         started = time.monotonic()
         results: list[ChatEvalResult] = []
         timed_out = False
+        deadline = started + self.max_seconds
         with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
-            futures = {pool.submit(self._send, probe): probe for probe in selected}
+            futures = {pool.submit(self._send, probe, deadline): probe for probe in selected}
             try:
                 for future in as_completed(futures, timeout=self.max_seconds):
                     results.append(future.result())
