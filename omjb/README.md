@@ -25,7 +25,7 @@ python -m omjb.cli verify corpus/fetched.jsonl.manifest.json
 python -m omjb.cli export 1 --format jsonl --output reports/run.jsonl
 ```
 
-Install with `pip install .`; this adds the `omjb` console command. Optional YAML support: `pip install '.[yaml]'`. JSON and JSONL work without dependencies.
+Install with `pip install .`; this adds the `omjb` console command. Optional YAML support: `pip install '.[yaml]'`. Optional Parquet support: `pip install '.[parquet]'`. JSON, JSONL, and CSV work without dependencies.
 
 ## Providers
 
@@ -46,7 +46,7 @@ Hosted endpoints require HTTPS. Ollama is restricted to localhost or HTTPS. Gene
 
 ## Data and guards
 
-Probe files may be JSON arrays, common dictionary-root datasets (including `instructions`, `prompts`, `examples`, or `data`), JSONL/NDJSON, YAML, and gzip/bzip2-compressed variants. Each record requires a non-empty prompt and unique ID. Optional provenance is validated and stored; `--require-provenance` requires source and revision, and `--dedupe` removes duplicate content hashes. A record explicitly marked `runnable: false` is rejected by the runner loader.
+Probe files may be JSON arrays, common dictionary-root datasets (including `instructions`, `prompts`, `examples`, or `data`), JSONL/NDJSON, CSV, Parquet, YAML, and gzip/bzip2-compressed text formats. Each record requires a non-empty prompt and unique ID. Optional provenance is validated and stored; `--require-provenance` requires source and revision, and `--dedupe` removes duplicate content hashes. A record explicitly marked `runnable: false` is rejected by the runner loader. CSV uses Python's standard library; Parquet is read in batches and requires PyArrow.
 
 The `omjb.guardrail_adapter` imports the repository's existing Guardrail Lab cases directly, including the 24 core cases and 52 reviewed source-derived safe adaptations. It preserves case IDs, expected signals, canaries, source metadata, native Guardrail Lab assessment labels, and the GL-009/GL-010 paired-turn context. Selecting GL-010 requires GL-009 immediately before it. It does not copy or execute the original-source archive. Run the existing suite through OMJB with `python -m omjb.cli run --suite guardrail-lab --name guardrail-omjb --target echo` (replace Echo with an authorized live provider when ready). The original `python -m modules.guardrail_lab` workflow remains unchanged.
 
@@ -68,9 +68,29 @@ Run it with `python -m omjb.cli run --suite guardrail-lab --name pipeline-check 
 
 ## Standalone guard review and pinned downloads
 
-Standalone guard evaluation accepts labeled JSON/JSONL/YAML corpora with `text` and `label` fields (`benign` or `attack`). Use `guard-evaluate` to persist each sample, expected label, guard decision, findings, and provenance in separate guard-evaluation tables. Use `guard-adjudicate` to review whether a recorded guard decision was correct, incorrect, unclear, or skipped. Reviewer identity scopes the pending queue. `guard-report` reports guard precision/recall against corpus labels and reviewer agreement separately. These records are intentionally not mixed with model-response adjudications (`refusal/compliance/partial/unclear/skip`), because a guard decision and a model response are different measurements.
+Standalone guard evaluation accepts labeled JSON/JSONL/YAML/CSV/Parquet corpora with `text` and `label` fields (`benign` or `attack`). Use `guard-evaluate` to persist each sample, expected label, guard decision, findings, and provenance in separate guard-evaluation tables. Use `guard-adjudicate` to review whether a recorded guard decision was correct, incorrect, unclear, or skipped. Reviewer identity scopes the pending queue. `guard-report` reports guard precision/recall against corpus labels and reviewer agreement separately. These records are intentionally not mixed with model-response adjudications (`refusal/compliance/partial/unclear/skip`), because a guard decision and a model response are different measurements.
 
-The `fetch` command downloads only a caller-configured HTTPS source with an explicit immutable revision, license declaration, expected SHA-256, and `reviewed: true` after a human has confirmed the source is authorized and safe as a runnable test corpus. Its JSON config requires `name`, `url`, `sha256`, `revision`, `license`, `format`, and `prompt_field`; optional field mappings include `id_field`, `category_field`, `expected_field`, `system_field`, `author`, `date`, and `notes`. The downloader rejects hash mismatches and unsupported expected labels, writes probe-schema JSONL, and uses the existing provenance manifest writer. It does not invent source licenses or ship third-party corpora; the license field is a caller-supplied declaration, not an independent legal determination. Original archive prompts should remain metadata-only unless separately reviewed and transformed into safe adaptations. Example: `python -m omjb.cli fetch --source-config source.json --output corpus/fetched.jsonl`, followed by `python -m omjb.cli verify corpus/fetched.jsonl.manifest.json`.
+The `fetch` command downloads only a caller-configured HTTPS source with an explicit immutable revision, license declaration, expected SHA-256, and `reviewed: true` after a human has confirmed the source is authorized and safe as a runnable test corpus. Its JSON config requires `name`, `url`, `sha256`, `revision`, `license`, `format`, and `prompt_field`. Supported formats are JSON, JSONL/NDJSON, YAML, CSV, and Parquet. CSV uses the standard library; Parquet requires `pip install 'openmind-omjb[parquet]'`. Optional field mappings include `id_field`, `category_field`, `expected_field`, and `system_field`.
+
+For probe corpora, `record_type` defaults to `probe` and the downloader emits the runner's probe schema. For labeled guard corpora, set `record_type: "guard"`, `label_field`, and a `label_map` mapping every source label to exactly `benign` or `attack`. Example:
+
+```json
+{
+  "name": "reviewed-guard-corpus",
+  "url": "https://example.org/pinned/data.csv",
+  "sha256": "REPLACE_WITH_64_HEX_SHA256",
+  "revision": "PINNED_COMMIT_OR_DATASET_REVISION",
+  "license": "REVIEWED_LICENSE_IDENTIFIER",
+  "format": "csv",
+  "prompt_field": "text",
+  "record_type": "guard",
+  "label_field": "label",
+  "label_map": {"0": "benign", "1": "attack"},
+  "reviewed": true
+}
+```
+
+The downloader rejects hash mismatches and unmapped labels, writes normalized JSONL plus a provenance manifest, and preserves source-row metadata. It does not invent source licenses or ship third-party corpora; the license field is a caller-supplied declaration, not an independent legal determination. Source labels are not treated as expected model responses: guard truth (`benign/attack`) remains separate from probe expectations (`refuse/comply/either`). Original archive prompts should remain metadata-only unless separately reviewed and transformed into safe adaptations. Example: `python -m omjb.cli fetch --source-config source.json --output corpus/fetched.jsonl`, followed by `python -m omjb.cli verify corpus/fetched.jsonl.manifest.json`.
 
 ## Evidence, adjudication and metrics
 

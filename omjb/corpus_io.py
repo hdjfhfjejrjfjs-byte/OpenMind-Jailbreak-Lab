@@ -1,7 +1,6 @@
-"""Format-sniffing corpus reader for JSON, JSONL, YAML and compressed variants."""
+"""Format-sniffing corpus reader for JSON, JSONL, YAML, CSV, Parquet and compressed variants."""
 from __future__ import annotations
-import bz2,gzip,json
-from pathlib import Path
+import bz2,csv,gzip,json
 from typing import Iterable
 
 LIST_KEYS=("probes","samples","rows","items","data","examples","records","attacks","instructions","prompts","dataset")
@@ -9,9 +8,9 @@ SPLIT_KEYS=("train","validation","valid","test","dev")
 
 def _open(path):
     p=str(path).lower()
-    if p.endswith(".gz"): return gzip.open(path,"rt",encoding="utf-8")
-    if p.endswith(".bz2"): return bz2.open(path,"rt",encoding="utf-8")
-    return open(path,"r",encoding="utf-8")
+    if p.endswith(".gz"): return gzip.open(path,"rt",encoding="utf-8",newline="")
+    if p.endswith(".bz2"): return bz2.open(path,"rt",encoding="utf-8",newline="")
+    return open(path,"r",encoding="utf-8",newline="")
 
 def detect_format(path):
     p=str(path).lower()
@@ -19,12 +18,14 @@ def detect_format(path):
         if p.endswith(ext): p=p[:-len(ext)]; break
     if p.endswith((".jsonl",".ndjson")): return "jsonl"
     if p.endswith(".json"): return "json"
+    if p.endswith(".csv"): return "csv"
+    if p.endswith(".parquet"): return "parquet"
     if p.endswith((".yaml",".yml")): return "yaml"
     raise ValueError(f"cannot infer corpus format for {path}")
 
 def _records(data,path):
     if isinstance(data,list):
-        for row in data: yield row
+        yield from data
         return
     if not isinstance(data,dict): raise ValueError(f"{path}: unsupported root type {type(data).__name__}")
     for key in LIST_KEYS:
@@ -50,6 +51,20 @@ def iter_records(path)->Iterable[dict]:
                 if not line.strip(): continue
                 try: yield json.loads(line)
                 except json.JSONDecodeError as e: raise ValueError(f"{path}:{line_no}: {e}") from e
+        return
+    if fmt=="csv":
+        with _open(path) as f:
+            reader=csv.DictReader(f)
+            if not reader.fieldnames: raise ValueError(f"{path}: CSV is missing a header row")
+            for line_no,row in enumerate(reader,2):
+                if None in row: raise ValueError(f"{path}:{line_no}: CSV row has more fields than the header")
+                yield row
+        return
+    if fmt=="parquet":
+        try: import pyarrow.parquet as pq
+        except ImportError as e: raise RuntimeError("Parquet support requires PyArrow; install with pip install 'openmind-omjb[parquet]'") from e
+        for batch in pq.ParquetFile(path).iter_batches(batch_size=1024):
+            yield from batch.to_pylist()
         return
     if fmt=="json":
         with _open(path) as f: data=json.load(f)

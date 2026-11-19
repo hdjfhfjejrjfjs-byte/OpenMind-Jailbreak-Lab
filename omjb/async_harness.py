@@ -8,6 +8,7 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -54,6 +55,7 @@ def parse_decision(data: dict[str, Any]) -> str:
                    "review": "review", "flag": "review"}
         if value in mapping:
             return mapping[value]
+        raise ValueError(f"unrecognized decision value: {value!r}")
     if "verdict" in data:
         value = str(data["verdict"]).strip().lower()
         mapping = {"allow": "allow", "safe": "allow", "pass": "allow",
@@ -61,9 +63,14 @@ def parse_decision(data: dict[str, Any]) -> str:
                    "review": "review", "flag": "review"}
         if value in mapping:
             return mapping[value]
-    if "safe" in data and isinstance(data["safe"], bool):
+        raise ValueError(f"unrecognized verdict value: {value!r}")
+    if "safe" in data:
+        if not isinstance(data["safe"], bool):
+            raise ValueError("safe must be a boolean")
         return "allow" if data["safe"] else "block"
-    if "flagged" in data and isinstance(data["flagged"], bool):
+    if "flagged" in data:
+        if not isinstance(data["flagged"], bool):
+            raise ValueError("flagged must be a boolean")
         return "review" if data["flagged"] else "allow"
     raise ValueError("unrecognized guard response; expected decision, verdict, safe, or flagged")
 
@@ -71,8 +78,12 @@ def parse_decision(data: dict[str, Any]) -> str:
 class AsyncGuardrailHarness:
     def __init__(self, endpoint: str, *, headers: dict[str, str] | None = None,
                  timeout: float = 15.0, concurrency: int = 4):
-        if not endpoint.startswith(("https://", "http://")):
-            raise ValueError("endpoint must be an HTTP(S) URL")
+        parsed = urlparse(endpoint)
+        local_hosts = {"localhost", "127.0.0.1", "::1"}
+        if parsed.scheme != "https" and not (parsed.scheme == "http" and parsed.hostname in local_hosts):
+            raise ValueError("endpoint must use HTTPS (HTTP is allowed only for loopback)")
+        if not parsed.hostname:
+            raise ValueError("endpoint must include a hostname")
         if timeout <= 0 or concurrency < 1:
             raise ValueError("timeout and concurrency must be positive")
         self.endpoint = endpoint
@@ -101,7 +112,7 @@ class AsyncGuardrailHarness:
 
     async def run(self, probes: list[Probe]) -> EndpointReport:
         semaphore = asyncio.Semaphore(self.concurrency)
-        async with httpx.AsyncClient(timeout=self.timeout, headers=self.headers) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, headers=self.headers, follow_redirects=False) as client:
             results = await asyncio.gather(
                 *(self._one(client, semaphore, probe) for probe in probes)
             )
