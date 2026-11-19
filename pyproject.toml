@@ -16,7 +16,7 @@ test = []
 
 [project.scripts]
 omjb = "omjb.cli:main"
-omjb-remote = "omjb.remote_cli:main"
+omjb-remote = "omjb.remote_cli:main"\nomjb-mutate = "omjb.mutation_engine.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["omjb*"]
