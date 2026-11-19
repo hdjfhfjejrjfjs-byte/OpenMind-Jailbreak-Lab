@@ -4,6 +4,24 @@
 
 This file records what has been verified on the current repository revision and what remains before a public release claim.
 
+## Verified on 2026-11-19 (v0.7.0-rc.4)
+
+Repository branch: `main`
+
+Code and workflow verification commit: Validate benchmark on `8fea5d3` (HEAD at tagging time, plus the release-notes commit). 181 commits since rc.3 (`b8d63fb` → `8fea5d3`).
+
+GitHub Actions results:
+
+| Workflow | Run | Result |
+|---|---:|---|
+| Validate benchmark | [44612084730](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44612084730) | Success |
+
+The validate workflow passed on Python 3.10, 3.11, and 3.12. Validation compiled all Python source and test files, validated benchmark versions 0.3 through 0.8.0, ran the benchmark quality audit and module smoke tests, and executed the complete unit-test suite. The OMJB and provider-matrix workflows did not run on the HEAD commit (path-filtered).
+
+Local full test suite on the release commit: **545 tests, all passing** (2 skipped without the external-corpus flag; with `OMJB_RUN_EXTERNAL_CORPUS_TESTS=1` the 2 real Parquet import tests pass as well). The run needs the optional `api` extra installed (`httpx`, `pyarrow`, `PyYAML`); a bare system-Python run errors on the two `httpx`-dependent tests only.
+
+What is new since rc.3: OMJB evaluation harness 0.2.0 (PR #4, #6, #7, #14, #25); CSV + Parquet corpus importer (PR #8, #9 — PR #9 merged by the repo owner); mutation robustness engine (PR #11, #12, #16, #17, #22); async and multi-provider evaluation (PR #10, #23); scalable benign robustness and persisted campaign history (PR #18–#21); 14-entry known-bypass regression set; README neon redesign (PR #24). No open PRs remain. Benchmark v0.8.0 (81 rows), Guardrail Lab 0.6.0 (76 cases), and AI Scanner 0.3.5 (11 probes) are unchanged.
+
 ## Verified on 2026-11-17
 
 Repository branch: `main`
@@ -47,13 +65,13 @@ Until the remaining items are completed, describe this repository as a validated
 
 
 
-## Current main revision — 2026-11-17
+## Current main revision — 2026-11-19
 
-Latest observed main commit: `bb601ef` (merge of PR #3, research contributions; code).
+Latest observed main commit: `8fea5d3` (sync installation docs; code), plus the release-notes commit for v0.7.0-rc.4.
 
-- [Validate benchmark — run 44222085189](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44222085189): **success** on the current main commit.
-- [Provider adapter regression matrix — run 44222085147](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44222085147): **success** on the current main commit.
-- The release-notes and release-status documentation now records the PR #3 research batch (benchmark v0.7.0/v0.8.0, source-corpus factorial, measurement contract, preflight, judge qualification, negative-evidence lifecycle, uncertainty display) and the 17 November AgentRouter re-test snapshot.
+- [Validate benchmark — run 44612084730](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44612084730): **success** on the current main commit.
+- Local full test suite: **545 tests, all passing** (see "Verified on 2026-11-19" above).
+- The release-notes and release-status documentation now records the rc.4 batch (OMJB harness 0.2.0, CSV/Parquet importer, mutation engine, async/multi-provider evaluator, campaign history, regression set, README redesign).
 
 The earlier code/workflow verification results listed above remain tied to their exact commit. Re-run the complete release validation workflow on the final release candidate before tagging.
 

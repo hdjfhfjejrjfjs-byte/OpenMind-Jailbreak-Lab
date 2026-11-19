@@ -1,32 +1,36 @@
 # OpenMind Jailbreak Lab — Release Candidate Notes
 
-**Suggested release tag:** `v0.7.0-rc.3`
+**Suggested release tag:** `v0.7.0-rc.4`
 **Target commit:** the final `main` commit containing this release-notes file
 **Release type:** Pre-release candidate
 
-## What changed since v0.7.0-rc.2
+## What changed since v0.7.0-rc.3
 
-Research contributions from Blackfrost (PR #3, merged as `bb601ef`) — measurement science for guardrail evaluation, research-purposes-only. All new test material is inert probes on synthetic canary markers; no new bypass techniques.
+181 commits since rc.3 (`b8d63fb` → `8fea5d3`, 2026-11-19). No benchmark version change: benchmark stays v0.8.0, Guardrail Lab stays 0.6.0, AI Scanner stays 0.3.5. The new work is the OMJB evaluation harness, the corpus importer, the mutation robustness engine, async/multi-provider evaluation, and campaign history.
 
-- **Benchmark v0.7.0 (75 cases: 44 adversarial / 31 benign):** fills the three singleton adversarial families (`history_edit`, `cross_model_pipeline`, `hypothetical_framing`, 2 cases each) and adds a second benign family (`benign_instruction_following`). The quality audit now returns `status: pass` with zero warnings.
-- **Benchmark v0.8.0 (81 cases: 44 adversarial / 37 benign):** adds six matched benign twins (OM-076..081) that keep frame, surface, and keywords from their v0.7.0 adversarial source rows but replace the injected instruction with a harmless task; `benchmark_v0.8.0-pairs.json` pins the twin→source mapping. v0.7.0 bytes stay untouched.
-- **Source-corpus factorial:** the 52 source-derived cases are now 52 pairwise-distinct prompts — a 4-category × 13-surface Latin square (quoted note, email, CSV, HTML comment, JSON field, retrieval, tool output, document record, code comment, Base64, Spanish, Markdown link, fictional narrator), one pair each. Before, they rendered four fixed prompts differing only by marker.
-- **API-key scrubbing:** provider error bodies are scrubbed of echoed key material (`***` replaces bare tokens and `Bearer <token>` forms) before reaching evidence reports, across the guardrail adapter, scanner compatible endpoints, and hosted provider headers.
-- **Config-pinned evidence contract:** `RunConfig` with canonical contract fields (weight/tokenizer/chat-template hashes, prompt hash, injection point, parser, truncation policy, judge identity, case-set hashes) and a `config_hash` over measured fields only; unmeasured settings are typed `not_measured`, never guessed. Comparisons always emit `config_equivalence`; strict mode marks cases incomparable unless configs match.
-- **Matched benign twins and potential false refusal:** the semantic-review rubric gains an optional `compliance` signal; Guardrail Lab `assess()` returns `potential_false_refusal` for control cases with narrow explicit refusal phrases.
-- **Frame × shape factorial metadata:** orthogonal, non-adaptive `frame_variant` / `shape_variant` metadata (3 fixed neutral frames × 2 shapes) with frozen decoding and a constant trusted system instruction; repeat-run confirmation must reproduce in at least two distinct frames.
-- **Judge qualification fixtures (opt-in):** four known-answer fixtures with a planted prior-answer decoy; `qualify_judge()` requires exact labels, correct case-id echo, and no prior-answer leakage. `--qualification-only` and `--require-qualified` are opt-in gates; human review of every provisional score remains mandatory.
-- **Typed preflight:** exactly four readiness states (`ready`, `not_ready`, `misconfigured`, `failed`) in a hash-bound, scrubbed evidence receipt. Readiness requires a benign real-forward echo, never a health response alone. The preflight workflow is manual-dispatch-only and never calls an external endpoint from PR CI.
-- **Negative-evidence lifecycle:** `superseded`, `not_reproduced`, and `not_measured` statuses. Supersession is append-only — the original row is preserved verbatim and linked both ways; superseded conclusions are counted separately and never ranked as confirmed.
-- **Honest uncertainty display:** comparisons emit descriptive dispersion (`n_observations`, comparable/excluded counts, agreement rate) and explicitly state that no confidence interval, p-value, or standard error is published.
-- **Guardrail Lab 0.6.0** (was 0.5.9). Full suite now **417 tests**.
-- **README:** evaluation snapshot for 17 November 2026 added — GPT-5.6-sol re-test 0 / 65 answered (OM-057 intermittent, 1 failure in 2 runs), GPT-6.1-sol first full lab test 0 / 63 answered; Gemini 76-case Guardrail Lab suite 0 potential failures (fully adjudicated).
+- **OMJB evaluation harness 0.2.0 (new):** Guardrail Lab integration (PR #4, squash `b412f36`); reviewer-aware guard adjudication and pinned corpus fetching (PR #6, squash `3433cd7`); legacy reviewer migration coverage (PR #7, merge `25252a8`); installation and operator docs refresh (PR #14, merge `b629240`; PR #25, commit `8fea5d3`).
+- **Corpus importer (CSV + Parquet):** CSV and Parquet corpus imports (PR #8, merge `59d2679`, including the `04ca261` push-paths filter fix) with real pinned Parquet verification tests (PR #9, merge `c51fa1c`, merged by the repo owner).
+- **Mutation robustness engine:** integration (PR #11, merge `f13e96e`); reproducible engine (PR #12, merge `4b4a31e`); spec and verdict hardening (PR #16); explicit mutation CLI cost estimates (PR #17); mutation trace replay, endpoint config, and decoder canary (PR #22, commit `42e2192`).
+- **Async and multi-provider evaluation:** async endpoint and provider evaluation (PR #10, merge `6f2c5d2`); bounded concurrent multi-provider evaluator (PR #23, merge `92382e0`, including the Ollama `num_predict` fix `261095c`).
+- **Scalable benign robustness and campaign history:** configurable benign robustness testing (PR #18); capacity docs (PR #19); capacity controls in adaptive campaigns (PR #20); persisted campaign history with resume of untested coverage (PR #21, commit `39a1dd8`).
+- **Regression set (new):** 14 known bypasses (`data/known_bypasses.json`), 11-row regression subset (`data/benchmark_regression.jsonl`), `scripts/regression_report.py`, per-family evaluator rollup, README "Tested configurations" section (`490874c`, `dbd23b8`, `a272ab7`).
+- **README redesign** with neon cyber-security visuals (PR #24, commit `ce7da26`).
+- **Closed unmerged:** PR #5 (OMJB install guide docs), PR #13 (typed-region mutation engine, superseded by #11/#12), PR #15 (install-guide refresh). No open PRs remain.
+
+## Unchanged
+
+- **Benchmark v0.8.0:** 81 rows (44 adversarial / 37 benign).
+- **Guardrail Lab 0.6.0:** 76 cases (24 core + 52 source-derived safe adaptations).
+- **AI Scanner 0.3.5:** 11 probes.
+- **Results stay local:** the 17 November run evidence was published and then fully reverted; the repo is back to results-local.
 
 ## Verification
 
-The [Validate benchmark run 44222085189](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44222085189) passed on commit `bb601ef` on Python 3.10, 3.11, and 3.12, and the [Provider adapter regression matrix run 44222085147](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44222085147) passed on the same commit on all three Pythons. The validation workflow compiled all Python sources, validated all seven benchmark versions (v0.3–v0.8.0), ran the quality audit (v0.7.0 and v0.8.0 both `pass`, zero warnings) and module smoke tests, and executed the complete unit-test suite (417 tests). The full unit-test suite (417 tests) and benchmark validation on all seven versions were also run locally on the release commit and passed.
+The [Validate benchmark run 44612084730](https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab/actions/runs/44612084730) passed on commit `8fea5d3` on Python 3.10, 3.11, and 3.12. The validation workflow compiled all Python sources, validated all benchmark versions (v0.3–v0.8.0), ran the quality audit and module smoke tests, and executed the complete unit-test suite.
 
-The 76-case live provider suite and selectable multi-provider Actions workflow have not been live-executed as part of this offline CI verification.
+The full unit-test suite was also run locally on the release commit: **545 tests, all passing** (2 skipped without the external-corpus flag; with `OMJB_RUN_EXTERNAL_CORPUS_TESTS=1` the 2 real Parquet import tests pass as well — one run hit a transient sandbox network timeout on the pinned-file download and passed on retry). The two errors seen in a bare system-Python run were a missing optional `httpx` dependency, not code failures; installing the `api` extra (`httpx`, plus `pyarrow` and `PyYAML`) clears them.
+
+The OMJB and provider-matrix workflows did not run on the HEAD commit (path-filtered), so the full workflow matrix was not re-verified on the final commit. The 76-case live provider suite and selectable multi-provider Actions workflow have not been live-executed as part of this offline CI verification.
 
 ## Known limitations
 
@@ -38,6 +42,6 @@ The 76-case live provider suite and selectable multi-provider Actions workflow h
 ## Before publishing this candidate
 
 1. Tag the final `main` commit containing this release-notes file.
-2. Create the tag `v0.7.0-rc.3` at that commit.
+2. Create the tag `v0.7.0-rc.4` at that commit.
 3. Publish as a GitHub **pre-release**, not a stable v1.0 release.
 4. Keep live model findings separate from offline CI results.
