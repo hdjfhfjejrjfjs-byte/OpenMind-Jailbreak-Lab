@@ -7,6 +7,7 @@ from omjb.mutation_engine.rng import derive_rng
 from omjb.mutation_engine.regions import Region, RegionValue, apply_region, region_compatible
 from omjb.mutation_engine.core import Kind
 from omjb.mutation_engine.scheduler import CostAwareUCB
+from omjb.mutation_engine.core import Registry, TransformSpec
 from omjb.probes import Probe
 
 class MutationEngineTests(unittest.TestCase):
@@ -88,6 +89,18 @@ class MutationEngineTests(unittest.TestCase):
         spec=load_spec({"stages":[{"name":"format","arms":["format.quote"]}]})
         with self.assertRaisesRegex(ValueError,"spec hash mismatch"):
             rebuild(spec,"hello",{"idx":0,"spec_hash":"wrong","arms":[]})
+
+    def test_prefix_suffix_contracts_are_text_only(self):
+        registry=Registry()
+        with self.assertRaisesRegex(ValueError,"must preserve TEXT"):
+            registry.register(TransformSpec("bad.prefix",lambda x,r:x,
+                input_kind=Kind.BASE64,output_kind=Kind.BASE64,touches="prefix"))
+
+    def test_endpoint_adapter_rejects_http_host_prefix_spoof(self):
+        from omjb.mutation_engine.adapter import httpx_submitter
+        with self.assertRaisesRegex(ValueError,"HTTPS"):
+            httpx_submitter("http://localhost.attacker.example/evaluate")
+        self.assertTrue(callable(httpx_submitter("http://127.0.0.1:8000/evaluate")))
 
     def test_scheduler_does_not_select_pruned_arms(self):
         scheduler=CostAwareUCB(prune_after=1,prune_below=.5)
