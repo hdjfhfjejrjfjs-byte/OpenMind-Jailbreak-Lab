@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/hero.jpg" alt="Hooded figure pointing at a glowing shield — OpenMind Jailbreak Lab" width="480">
+<img src="assets/neon-probe.svg" alt="Animated neon network security probe scanning a shield target" width="100%">
 
 # OPENMIND // JAILBREAK LAB
 
