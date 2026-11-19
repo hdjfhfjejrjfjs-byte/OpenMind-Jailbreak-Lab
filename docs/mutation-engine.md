@@ -40,3 +40,20 @@ For a positive USD budget, Engine requires an estimate_cost callback. It must
 return a conservative upper-bound estimate for each candidate before submission.
 Candidates whose reservation would exceed the remaining budget are not sent.
 The engine reconciles the reported actual cost against the reservation.
+
+## CLI
+
+Install the optional HTTP client and run against a guardrail endpoint you operate:
+
+    pip install -e ".[api]"
+    export OMJB_GUARDRAIL_TOKEN="..."
+    omjb-mutate --spec configs/mutation-robustness.example.json \
+      --corpus reviewed-benign-probes.jsonl --probe-id benign-001 \
+      --endpoint https://guardrail.example/evaluate \
+      --estimated-request-cost 0.001 --trace mutation-trace.jsonl
+
+The corpus record must have expected=comply and meta.mutation_safe=true.
+The CLI selects exactly one probe by ID and reads its bearer token from the
+named environment variable; it never writes credentials into the trace.
+For non-billable endpoints, the request-cost estimate may be zero. For a
+billable endpoint, supply a conservative per-request upper bound.
