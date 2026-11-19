@@ -193,7 +193,7 @@ class MutationEngine:
         if not probe.prompt.strip():
             raise ValueError("probe prompt must not be empty")
 
-    def generate(self, probe: Probe, *, include_chains: bool = True) -> list[MutationCase]:
+    def generate(self, probe: Probe, *, include_chains: bool = True,\n                 max_chain_depth: int | None = None) -> list[MutationCase]:
         self._validate(probe)
         candidates: list[tuple[str, list[str], list[str]]] = []
         for mutation in STATIC_MUTATIONS:
@@ -201,7 +201,7 @@ class MutationEngine:
                 continue
             candidates.append((mutation.apply(probe.prompt), [mutation.name], [mutation.family]))
         if include_chains:
-            for path in self.narrative_graph.paths(max_depth=self.max_chain_depth):
+            for path in self.narrative_graph.paths(\n                max_depth=self.max_chain_depth if max_chain_depth is None else max_chain_depth\n            ):
                 if len(path) < 2:
                     continue
                 candidates.append((
