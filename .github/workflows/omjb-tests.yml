@@ -18,6 +18,7 @@ on:
       - "tests/test_omjb.py"
       - "tests/test_guard_review.py"
       - "tests/test_downloaders.py"
+      - "tests/test_async_provider_eval.py"
       - "corpus/omjb_probes.json"
       - "pyproject.toml"
       - ".github/workflows/omjb-tests.yml"
