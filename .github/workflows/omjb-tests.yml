@@ -1,7 +1,7 @@
 name: OMJB tests
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/async-provider-evaluation]
     paths:
       - "omjb/**"
       - "tests/test_omjb.py"
