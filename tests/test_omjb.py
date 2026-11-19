@@ -1,4 +1,4 @@
-import json,sqlite3,tempfile,unittest
+import json,sqlite3,tempfile,unittest,time
 from pathlib import Path
 from omjb.probes import load_probes,Probe
 from omjb.targets import EchoTarget,Message,OpenAICompatTarget,GeminiTarget
@@ -12,6 +12,27 @@ from omjb.guard_eval import load_labeled,evaluate
 from omjb.provenance import write_corpus,verify_manifest,ProvenanceRecord
 from omjb.stats import wilson_interval,classification_metrics
 from omjb.export import export_jsonl,export_csv
+
+LEGACY_SCHEMA = """
+CREATE TABLE runs(id INTEGER PRIMARY KEY, name TEXT, target TEXT, config TEXT, started_at REAL, finished_at REAL);
+CREATE TABLE results(id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL, probe_id TEXT, probe_category TEXT, prompt TEXT, system TEXT, response TEXT, response_sha256 TEXT, detector_label TEXT, detector_score REAL, detector_reason TEXT, bypass INTEGER, meta TEXT, created_at REAL, pipeline_result TEXT, provenance TEXT);
+CREATE TABLE adjudications(id INTEGER PRIMARY KEY, result_id INTEGER NOT NULL, label TEXT, notes TEXT, adjudicated_at REAL);
+CREATE TABLE guard_observations(id INTEGER PRIMARY KEY, result_id INTEGER NOT NULL, stage TEXT NOT NULL, decision TEXT NOT NULL, findings TEXT NOT NULL, created_at REAL);
+"""
+
+def _populate_legacy_db(path):
+    conn = sqlite3.connect(path)
+    conn.executescript(LEGACY_SCHEMA)
+    now = time.time()
+    conn.execute("INSERT INTO runs(id,name,target,config,started_at,finished_at) VALUES(1,'legacy-run','echo','{}',?,?)", (now - 100, now - 50))
+    for i, probe_id in enumerate(["p1", "p2"], 1):
+        conn.execute("INSERT INTO results(id,run_id,probe_id,probe_category,prompt,detector_label,created_at) VALUES(?,1,?,?,?,?,?)", (i, probe_id, "cat", f"prompt-{i}", "compliance", now - 10 + i))
+    conn.execute("INSERT INTO adjudications(id,result_id,label,notes,adjudicated_at) VALUES(1,1,'refusal','first pass',?)", (now - 5,))
+    conn.execute("INSERT INTO adjudications(id,result_id,label,notes,adjudicated_at) VALUES(2,1,'compliance','second pass',?)", (now - 4,))
+    conn.execute("INSERT INTO adjudications(id,result_id,label,notes,adjudicated_at) VALUES(3,2,'partial','single pass',?)", (now - 3,))
+    conn.commit()
+    conn.close()
+
 
 class OMJBTests(unittest.TestCase):
     def test_echo_target(self):
@@ -170,5 +191,97 @@ class OMJBTests(unittest.TestCase):
             self.assertEqual(len(row["response_sha256"]),64); self.assertEqual(summarize(s,rid)["n"],1)
             self.assertEqual(export_jsonl(s,rid,str(Path(tmp)/"out.jsonl")),1)
             self.assertEqual(export_csv(s,rid,str(Path(tmp)/"out.csv")),1); s.close()
+
+    def test_populated_legacy_db_migrates_without_data_loss(self):
+        db = Path(tempfile.mkdtemp()) / "legacy.db"
+        _populate_legacy_db(str(db))
+        store = Store(str(db))
+        try:
+            rows = store.conn.execute("SELECT id,label,notes FROM adjudications ORDER BY id").fetchall()
+            self.assertEqual([(r["id"], r["label"], r["notes"]) for r in rows], [(1,"refusal","first pass"),(2,"compliance","second pass"),(3,"partial","single pass")])
+            rows = store.conn.execute("SELECT id,reviewer FROM adjudications ORDER BY id").fetchall()
+            for row in rows:
+                self.assertEqual(row["reviewer"], "", f"row {row['id']}")
+                self.assertIsNotNone(row["reviewer"], f"row {row['id']}")
+            with_adj = store.get_results_with_adjudication(1)
+            by_probe = {r["probe_id"]: r for r in with_adj}
+            self.assertEqual(len(with_adj), 2)
+            self.assertEqual(by_probe["p1"]["adj_label"], "compliance")
+            self.assertEqual(by_probe["p1"]["adj_notes"], "second pass")
+            self.assertEqual(by_probe["p2"]["adj_label"], "partial")
+            self.assertEqual(store.unadjudicated(1), [])
+            adj_only = store.get_adjudicated_results(1)
+            self.assertEqual(len(adj_only), 2)
+            self.assertEqual({r["probe_id"] for r in adj_only}, {"p1","p2"})
+            store.add_adjudication(1, "refusal", "post-migration")
+            row = store.conn.execute("SELECT reviewer FROM adjudications WHERE notes='post-migration'").fetchone()
+            self.assertIsNotNone(row)
+            self.assertEqual(row["reviewer"], "")
+            by_probe = {r["probe_id"]: r for r in store.get_results_with_adjudication(1)}
+            self.assertEqual(by_probe["p1"]["adj_label"], "refusal")
+            self.assertEqual(by_probe["p1"]["adj_notes"], "post-migration")
+        finally:
+            store.close()
+        store2 = Store(str(db))
+        try:
+            rows = store2.conn.execute("SELECT id,reviewer FROM adjudications WHERE id IN (1,2,3)").fetchall()
+            self.assertEqual(len(rows), 3)
+            self.assertTrue(all(r["reviewer"] == "" for r in rows))
+            self.assertEqual(len(store2.get_results_with_adjudication(1)), 2)
+        finally:
+            store2.close()
+
+    def test_populated_legacy_db_reviewer_filter(self):
+        db = Path(tempfile.mkdtemp()) / "legacy.db"
+        _populate_legacy_db(str(db))
+        store = Store(str(db))
+        try:
+            # Baseline: legacy-only state.
+            # With no reviewer filter, get_results_with_adjudication returns both
+            # rows, each matched to its latest adjudication overall (p1 -> id=2,
+            # p2 -> id=3).
+            # With reviewer="", it also returns both rows — but the JOIN is against
+            # the empty-reviewer bucket, which currently holds every legacy row, so
+            # the matched adjudications are the same.
+            # With reviewer="alice", it *still* returns both rows because the JOIN
+            # is LEFT, not INNER: p2 is present with NULL adjudication fields. That
+            # case is exercised further below.
+            # The distinction to keep straight is "rows returned" vs "adjudications
+            # matched" — they diverge once a reviewer filter is applied and the
+            # reviewer has not adjudicated every result.
+            by_probe = {r["probe_id"]: r for r in store.get_results_with_adjudication(1)}
+            self.assertEqual(by_probe["p1"]["adj_label"], "compliance")
+            self.assertEqual(by_probe["p2"]["adj_label"], "partial")
+            by_probe_empty = {r["probe_id"]: r for r in store.get_results_with_adjudication(1, reviewer="")}
+            self.assertEqual(by_probe_empty["p1"]["adj_label"], "compliance")
+            self.assertEqual(by_probe_empty["p2"]["adj_label"], "partial")
+            store.add_adjudication(1, "refusal", "alice's view", reviewer="alice")
+            by_probe = {r["probe_id"]: r for r in store.get_results_with_adjudication(1)}
+            self.assertEqual(by_probe["p1"]["adj_label"], "refusal")
+            self.assertEqual(by_probe["p1"]["adj_notes"], "alice's view")
+            self.assertEqual(by_probe["p2"]["adj_label"], "partial")
+            by_probe_empty = {r["probe_id"]: r for r in store.get_results_with_adjudication(1, reviewer="")}
+            self.assertEqual(by_probe_empty["p1"]["adj_label"], "compliance")
+            self.assertEqual(by_probe_empty["p1"]["adj_notes"], "second pass")
+            self.assertEqual(by_probe_empty["p2"]["adj_label"], "partial")
+            by_probe_alice = {r["probe_id"]: r for r in store.get_results_with_adjudication(1, reviewer="alice")}
+            self.assertEqual(by_probe_alice["p1"]["adj_label"], "refusal")
+            self.assertEqual(by_probe_alice["p1"]["adj_notes"], "alice's view")
+            self.assertIsNone(by_probe_alice["p2"]["adj_label"])
+            self.assertIsNone(by_probe_alice["p2"]["adj_notes"])
+            adj_all = store.get_adjudicated_results(1)
+            self.assertEqual({r["probe_id"] for r in adj_all}, {"p1","p2"})
+            adj_empty = store.get_adjudicated_results(1, reviewer="")
+            self.assertEqual({r["probe_id"] for r in adj_empty}, {"p1","p2"})
+            adj_alice = store.get_adjudicated_results(1, reviewer="alice")
+            self.assertEqual({r["probe_id"] for r in adj_alice}, {"p1"})
+            self.assertEqual(adj_alice[0]["adjudicated_label"], "refusal")
+            self.assertEqual(store.unadjudicated(1), [])
+            self.assertEqual(store.unadjudicated(1, reviewer=""), [])
+            pending_alice = store.unadjudicated(1, reviewer="alice")
+            self.assertEqual({r["probe_id"] for r in pending_alice}, {"p2"})
+        finally:
+            store.close()
+
 
 if __name__=="__main__": unittest.main()
