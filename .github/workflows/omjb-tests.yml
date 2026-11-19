@@ -34,4 +34,4 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_omjb.py' -v
       - run: python -m unittest discover -s tests -p 'test_guard_review.py' -v
       - run: python -m unittest discover -s tests -p 'test_downloaders.py' -v
-      - run: python -m unittest discover -s tests -p 'test_async_provider_eval.py' -v
+      - run: python -m unittest discover -s tests -p 'test_async_provider_eval.py' -v\n      - run: python -m unittest discover -s tests -p 'test_mutation_engine.py' -v
