@@ -55,6 +55,7 @@ def parse_decision(data: dict[str, Any]) -> str:
                    "review": "review", "flag": "review"}
         if value in mapping:
             return mapping[value]
+        raise ValueError(f"unrecognized decision value: {value!r}")
     if "verdict" in data:
         value = str(data["verdict"]).strip().lower()
         mapping = {"allow": "allow", "safe": "allow", "pass": "allow",
@@ -62,9 +63,14 @@ def parse_decision(data: dict[str, Any]) -> str:
                    "review": "review", "flag": "review"}
         if value in mapping:
             return mapping[value]
-    if "safe" in data and isinstance(data["safe"], bool):
+        raise ValueError(f"unrecognized verdict value: {value!r}")
+    if "safe" in data:
+        if not isinstance(data["safe"], bool):
+            raise ValueError("safe must be a boolean")
         return "allow" if data["safe"] else "block"
-    if "flagged" in data and isinstance(data["flagged"], bool):
+    if "flagged" in data:
+        if not isinstance(data["flagged"], bool):
+            raise ValueError("flagged must be a boolean")
         return "review" if data["flagged"] else "allow"
     raise ValueError("unrecognized guard response; expected decision, verdict, safe, or flagged")
 
@@ -106,7 +112,7 @@ class AsyncGuardrailHarness:
 
     async def run(self, probes: list[Probe]) -> EndpointReport:
         semaphore = asyncio.Semaphore(self.concurrency)
-        async with httpx.AsyncClient(timeout=self.timeout, headers=self.headers) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, headers=self.headers, follow_redirects=False) as client:
             results = await asyncio.gather(
                 *(self._one(client, semaphore, probe) for probe in probes)
             )
