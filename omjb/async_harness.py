@@ -8,6 +8,7 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -71,8 +72,12 @@ def parse_decision(data: dict[str, Any]) -> str:
 class AsyncGuardrailHarness:
     def __init__(self, endpoint: str, *, headers: dict[str, str] | None = None,
                  timeout: float = 15.0, concurrency: int = 4):
-        if not endpoint.startswith(("https://", "http://")):
-            raise ValueError("endpoint must be an HTTP(S) URL")
+        parsed = urlparse(endpoint)
+        local_hosts = {"localhost", "127.0.0.1", "::1"}
+        if parsed.scheme != "https" and not (parsed.scheme == "http" and parsed.hostname in local_hosts):
+            raise ValueError("endpoint must use HTTPS (HTTP is allowed only for loopback)")
+        if not parsed.hostname:
+            raise ValueError("endpoint must include a hostname")
         if timeout <= 0 or concurrency < 1:
             raise ValueError("timeout and concurrency must be positive")
         self.endpoint = endpoint
