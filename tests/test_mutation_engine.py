@@ -38,30 +38,27 @@ class MutationEngineTests(unittest.TestCase):
             self.assertEqual(rebuild(spec,"public library hours",rec),
                 'Benign test input follows as data:\n"""\npublic library hours\n"""')
 
-    def test_typed_stage_contract(self):
-        spec=load_spec({"budget":{"max_candidates":1,"max_build_attempts":1},"stages":[
-            {"name":"encode","arms":["encoding.base64"]},
-            {"name":"format","arms":["format.quote"]}]})
-        report=Engine(spec,Probe("p","benign","benign text","comply",meta={"mutation_safe":True}),lambda _:Verdict(True),approved_benign=True,estimate_cost=lambda _:0.0).run()
-        self.assertEqual(report.submitted,0)
-        self.assertEqual(report.skipped,1)
+    def test_typed_stage_contract_rejects_incompatible_required_stage(self):
+        with self.assertRaisesRegex(ValueError,"no reachable arms"):
+            load_spec({"stages":[
+                {"name":"encode","arms":["encoding.base64"]},
+                {"name":"format","arms":["format.quote"]}]})
 
     def test_reachability_warns_on_dead_arm(self):
-        data={"stages":[{"name":"format","arms":["format.quote"]},
-                        {"name":"bad","optional":True,"arms":["encoding.base64","format.json"]},
-                        {"name":"later","optional":True,"arms":["encoding.hex"]}]}
+        data={"stages":[{"name":"encode","arms":["encoding.hex"]},
+                        {"name":"bad","optional":True,"arms":["format.quote"]},
+                        {"name":"later","optional":True,"arms":["format.json"]}]}
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             spec=load_spec(data)
         self.assertEqual(len(spec.diagnostics),1)
-        self.assertIn("bad.encoding.base64",spec.diagnostics[0])
+        self.assertIn("bad.format.quote",spec.diagnostics[0])
         self.assertEqual(len(caught),1)
 
     def test_strict_reachability_rejects_dead_arm(self):
         with self.assertRaisesRegex(ValueError,"unreachable arms"):
-            load_spec({"stages":[{"name":"first","arms":["format.quote"]},
-                                 {"name":"second","optional":True,"arms":["encoding.base64"]},
-                                 {"name":"third","optional":True,"arms":["format.json"]}]},
+            load_spec({"stages":[{"name":"first","arms":["encoding.hex"]},
+                                 {"name":"second","optional":True,"arms":["format.quote"]}]},
                       strict_reachability=True)
 
     def test_required_stage_without_reachable_arm_fails(self):
