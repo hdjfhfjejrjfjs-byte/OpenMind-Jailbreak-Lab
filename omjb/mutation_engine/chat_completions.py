@@ -71,9 +71,6 @@ def parse_provider_spec(value: str) -> ProviderSpec:
         raise ValueError(f"unsupported provider {name!r}; choose from {', '.join(sorted(allowed))}")
     if not model:
         raise ValueError(f"model is required for provider {name!r}")
-    if name == "openai-compatible" and not os.environ.get("OMJB_PROVIDER_BASE_URL"):
-        # The caller may provide --base-url; this is checked during construction.
-        pass
     return ProviderSpec(name, model)
 
 
@@ -146,10 +143,6 @@ class MultiProviderEvaluator:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError("campaign wall-clock budget exhausted before request start")
-            # Native adapters take their own configured timeout. Cap it by the
-            # remaining campaign window to avoid starting work beyond deadline.
-            if hasattr(target, "timeout"):
-                target.timeout = min(float(target.timeout), remaining)
             system = probe.system or DEFAULT_SYSTEM
             generation = target.generate(
                 [Message("system", system), Message("user", prompt)],
@@ -247,8 +240,10 @@ def run_campaign_from_specs(
     max_tokens: int = 1024, output: str = "multi-provider-report.json",
 ) -> dict:
     specs = [parse_provider_spec(value) for value in targets]
+    if base_url and len(specs) != 1:
+        raise ValueError("--base-url can be used only when exactly one --target is configured")
     adapters = [
-        build_provider(spec, base_url=base_url, api_key_env=api_key_env, timeout=timeout)
+        build_provider(spec, base_url=base_url, api_key_env=api_key_env, timeout=min(timeout, max_seconds))
         for spec in specs
     ]
     evaluator = MultiProviderEvaluator(
