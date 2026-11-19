@@ -52,8 +52,14 @@ class NativeProviderAdapterTests(unittest.TestCase):
         with patch("omjb.targets._HTTPMixin._post", return_value={
             "message": {"content": "local hello"}
         }) as post:
-            self.assertEqual(ollama.generate([Message("user", "hello")]).text, "local hello")
+            self.assertEqual(ollama.generate(
+                [Message("user", "hello")], max_tokens=77, temperature=0.2
+            ).text, "local hello")
         self.assertEqual(post.call_args.args[0], "/api/chat")
+        options = post.call_args.args[1]["options"]
+        self.assertEqual(options["num_predict"], 77)
+        self.assertNotIn("max_tokens", options)
+        self.assertEqual(options["temperature"], 0.2)
 
     def test_http_endpoint_validation_requires_a_real_loopback_host(self):
         self.assertTrue(is_loopback_http_url("http://localhost:11434"))
