@@ -1,5 +1,4 @@
-import hashlib,json
-import warnings
+import hashlib,json,warnings
 from dataclasses import dataclass,field
 from .core import Kind,REGISTRY,StageArm
 
@@ -22,34 +21,41 @@ class PipelineSpec:
     def hash(self):
         return hashlib.sha256(self.canonical().encode()).hexdigest()[:24]
 
+def _arm_compatible(ts,state):
+    structured,kind=state
+    if ts.touches in ("prefix","suffix"): return structured
+    if ts.touches=="blob": return structured and kind is ts.input_kind
+    return kind is ts.input_kind
+
 def validate_spec(spec:PipelineSpec,registry=REGISTRY,*,strict=False):
-    """Forward dataflow over Kind values; optional stages retain their bypass path."""
-    reachable={Kind.TEXT}
+    """Forward dataflow over (structured, blob-kind) states."""
+    states={(False,Kind.TEXT)}
     diagnostics=[]
-    for stage_index,stage in enumerate(spec.stages):
+    for index,stage in enumerate(spec.stages):
         compatible=[]
+        next_states=set()
         for arm in stage.arms:
-            transform=registry.get(arm.name)
-            if transform.input_kind in reachable:
+            ts=registry.get(arm.name)
+            matching=[state for state in states if _arm_compatible(ts,state)]
+            if matching:
                 compatible.append(arm)
+                for structured,kind in matching:
+                    if ts.touches in ("prefix","suffix"):
+                        next_states.add((True,kind))
+                    elif ts.touches=="blob":
+                        next_states.add((True,ts.output_kind))
+                    else:
+                        next_states.add((ts.structured_output,ts.output_kind))
             else:
-                message=(f"unreachable arm {stage.name}.{arm.name}: requires "
-                         f"{transform.input_kind.value}; reachable kinds are "
-                         f"{sorted(kind.value for kind in reachable)}")
-                diagnostics.append(message)
+                diagnostics.append(f"unreachable arm {stage.name}.{arm.name}: touches={ts.touches}, input_kind={ts.input_kind.value}, reachable={[(s,k.value) for s,k in sorted(states,key=lambda x:(x[0],x[1].value))]}")
         if not compatible and not stage.optional:
-            raise ValueError(f"stage {stage.name!r} has no reachable arms at index {stage_index}; "
-                             + "; ".join(diagnostics[-len(stage.arms):]))
-        next_kinds={registry.get(arm.name).output_kind for arm in compatible}
-        if stage.optional:
-            next_kinds.update(reachable)
-        if compatible:
-            reachable=next_kinds
+            stage_errors=[d for d in diagnostics if d.startswith(f"unreachable arm {stage.name}.")]
+            raise ValueError(f"stage {stage.name!r} has no reachable arms at index {index}; "+"; ".join(stage_errors))
+        if stage.optional: next_states.update(states)
+        if compatible: states=next_states
     spec.diagnostics=diagnostics
-    if strict and diagnostics:
-        raise ValueError("pipeline contains unreachable arms: "+"; ".join(diagnostics))
-    for message in diagnostics:
-        warnings.warn(message,UserWarning,stacklevel=2)
+    if strict and diagnostics: raise ValueError("pipeline contains unreachable arms: "+"; ".join(diagnostics))
+    for message in diagnostics: warnings.warn(message,UserWarning,stacklevel=2)
     return diagnostics
 
 def load_spec(d,*,registry=REGISTRY,strict_reachability=False):
