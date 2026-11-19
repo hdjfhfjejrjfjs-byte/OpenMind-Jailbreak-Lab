@@ -94,7 +94,6 @@ class GeminiTarget(Target,_HTTPMixin):
 
 def target_from_env(kind,model,base_url=None,api_key_env=None):
     if kind=="echo": return EchoTarget()
-    if kind=="ollama": return OllamaTarget(kind,base_url or "http://localhost:11434",model)
     defaults = {
         "gemini": ("GEMINI_API_KEY", "https://generativelanguage.googleapis.com"),
         "anthropic": ("ANTHROPIC_API_KEY", "https://api.anthropic.com"),
