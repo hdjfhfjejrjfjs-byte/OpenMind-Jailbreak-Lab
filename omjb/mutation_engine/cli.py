@@ -16,6 +16,42 @@ from .spec import load_spec
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "chat-eval":
+        parser = argparse.ArgumentParser(prog="omjb-mutate chat-eval")
+        parser.add_argument("--corpus", required=True)
+        parser.add_argument("--model", required=True)
+        parser.add_argument("--endpoint")
+        parser.add_argument("--config", help="JSON config (or YAML when the yaml extra is installed)")
+        parser.add_argument("--timeout", type=float)
+        parser.add_argument("--token-env")
+        parser.add_argument("--workers", type=int, default=3)
+        parser.add_argument("--max-requests", type=int, default=50)
+        parser.add_argument("--max-seconds", type=float, default=300)
+        parser.add_argument("--max-usd", type=float, default=0,
+                            help="finite campaign USD ceiling; use 0 only for a free/local endpoint")
+        parser.add_argument("--estimated-request-cost", type=float, default=0,
+                            help="conservative per-request USD upper bound")
+        parser.add_argument("--temperature", type=float, default=0)
+        parser.add_argument("--max-tokens", type=int, default=1024)
+        parser.add_argument("--output", default="chat-eval-report.json")
+        args = parser.parse_args(argv[1:])
+        from .chat_completions import run_from_config
+        try:
+            report = run_from_config(
+                args.corpus, model=args.model, config_path=args.config,
+                endpoint=args.endpoint, timeout=args.timeout, token_env=args.token_env,
+                max_workers=args.workers, max_requests=args.max_requests,
+                max_seconds=args.max_seconds, max_usd=args.max_usd,
+                estimated_request_cost=args.estimated_request_cost,
+                temperature=args.temperature, max_tokens=args.max_tokens,
+                output=args.output,
+            )
+        except (ValueError, RuntimeError, OSError, json.JSONDecodeError) as exc:
+            parser.error(str(exc))
+        print(json.dumps({k: v for k, v in report.items() if k != "results"},
+                         indent=2, sort_keys=True))
+        print(f"Full evidence written to {args.output}")
+        return 0
     if argv and argv[0] == "replay":
         parser = argparse.ArgumentParser(prog="omjb-mutate replay")
         parser.add_argument("--baseline", required=True)
