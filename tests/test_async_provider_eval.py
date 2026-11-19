@@ -51,6 +51,14 @@ class CostTests(unittest.TestCase):
 
 
 class ProviderSafetyTests(unittest.TestCase):
+    def test_provider_name_and_model_must_be_paired(self):
+        pipeline=ProviderEvaluationPipeline(ProviderRegistry())
+        probe=Probe("safe","benign","Public library hours","comply",
+                    meta={"mutation_safe":True})
+        with self.assertRaisesRegex(ValueError,"supplied together"):
+            asyncio.run(pipeline.run([probe],endpoint="https://guard.example/evaluate",
+                                     provider_name="openai"))
+
     def test_only_reviewed_benign_probes_reach_provider(self):
         class FakeProvider:
             name = "fake"
