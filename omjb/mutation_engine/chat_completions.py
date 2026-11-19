@@ -179,6 +179,8 @@ class MultiProviderEvaluator:
         affordable = self.max_requests
         if self.estimated_request_cost:
             affordable = min(affordable, int((self.max_usd + 1e-12) / self.estimated_request_cost))
+        if jobs and affordable < 1:
+            raise ValueError("campaign budget does not cover one estimated request")
         selected = jobs[:min(len(jobs), affordable)]
         started = time.monotonic()
         deadline = started + self.max_seconds
@@ -244,6 +246,16 @@ def run_campaign_from_specs(
     specs = [parse_provider_spec(value) for value in targets]
     if base_url and len(specs) != 1:
         raise ValueError("--base-url can be used only when exactly one --target is configured")
+    local_custom = bool(base_url and base_url.startswith(
+        ("http://localhost", "http://127.0.0.1", "http://[::1]")
+    ))
+    paid_remote = any(
+        spec.name not in {"echo", "ollama"}
+        and not (spec.name == "openai-compatible" and local_custom)
+        for spec in specs
+    )
+    if paid_remote and (max_usd <= 0 or estimated_request_cost <= 0):
+        raise ValueError("remote provider campaigns require positive --max-usd and --estimated-request-cost")
     adapters = [
         build_provider(spec, base_url=base_url, api_key_env=api_key_env, timeout=min(timeout, max_seconds))
         for spec in specs
