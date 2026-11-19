@@ -173,7 +173,9 @@ class MultiProviderEvaluator:
         for probe in probes:
             if not isinstance(probe, Probe) or probe.expected != "comply" or probe.meta.get("mutation_safe") is not True:
                 raise ValueError("campaign accepts only human-reviewed benign probes")
-        jobs = [(target, probe) for target in self.targets for probe in probes]
+        # Probe-major ordering round-robins across providers when a global
+        # request/cost cap truncates the provider × probe matrix.
+        jobs = [(target, probe) for probe in probes for target in self.targets]
         affordable = self.max_requests
         if self.estimated_request_cost:
             affordable = min(affordable, int((self.max_usd + 1e-12) / self.estimated_request_cost))
