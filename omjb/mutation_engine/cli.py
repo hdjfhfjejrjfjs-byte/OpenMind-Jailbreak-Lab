@@ -16,6 +16,42 @@ from .spec import load_spec
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "chat-eval":
+        parser = argparse.ArgumentParser(prog="omjb-mutate chat-eval")
+        parser.add_argument("--corpus", required=True)
+        parser.add_argument("--target", action="append", required=True,
+                            help="provider:model; repeat for a cross-provider campaign (e.g. gemini:gemini-2.5-flash)")
+        parser.add_argument("--base-url", help="custom endpoint for openai-compatible or provider proxy")
+        parser.add_argument("--api-key-env", help="environment variable holding the provider API key")
+        parser.add_argument("--timeout", type=float, default=60)
+        parser.add_argument("--workers", type=int, default=4)
+        parser.add_argument("--max-requests", type=int, default=100)
+        parser.add_argument("--max-seconds", type=float, default=300)
+        parser.add_argument("--max-usd", type=float, default=0,
+                            help="finite campaign USD ceiling; use 0 only for free/local endpoints")
+        parser.add_argument("--estimated-request-cost", type=float, default=0,
+                            help="conservative upper-bound cost per provider request")
+        parser.add_argument("--temperature", type=float, default=0)
+        parser.add_argument("--max-tokens", type=int, default=1024)
+        parser.add_argument("--output", default="multi-provider-report.json")
+        args = parser.parse_args(argv[1:])
+        from .chat_completions import run_campaign_from_specs
+        try:
+            report = run_campaign_from_specs(
+                args.corpus, targets=args.target, base_url=args.base_url,
+                api_key_env=args.api_key_env, timeout=args.timeout,
+                max_workers=args.workers, max_requests=args.max_requests,
+                max_seconds=args.max_seconds, max_usd=args.max_usd,
+                estimated_request_cost=args.estimated_request_cost,
+                temperature=args.temperature, max_tokens=args.max_tokens,
+                output=args.output,
+            )
+        except (ValueError, RuntimeError, OSError, json.JSONDecodeError) as exc:
+            parser.error(str(exc))
+        print(json.dumps({k: v for k, v in report.items() if k != "results"},
+                         indent=2, sort_keys=True))
+        print(f"Full evidence written to {args.output}")
+        return 0
     if argv and argv[0] == "replay":
         parser = argparse.ArgumentParser(prog="omjb-mutate replay")
         parser.add_argument("--baseline", required=True)

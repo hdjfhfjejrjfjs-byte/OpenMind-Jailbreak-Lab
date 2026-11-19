@@ -4,6 +4,8 @@
 
 OMJB is an additive, provider-neutral evaluation package. It does not replace the repository's Guardrail Lab, 76-case suite, benchmark, scanner, original-source metadata browser, or manual-review workspace.
 
+The concurrent multi-provider evaluator supports native OpenAI, Anthropic, Gemini, Ollama, DeepSeek, Groq, Together, and custom OpenAI-compatible adapters; see [chat-completions-evaluator.md](../docs/chat-completions-evaluator.md).
+
 ## Install and run
 
 Python 3.10+; standard library only for the core package.
