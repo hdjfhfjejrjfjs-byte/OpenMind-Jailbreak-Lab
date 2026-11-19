@@ -20,6 +20,10 @@ class DecisionParsingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_decision({"ok": True})
 
+    def test_invalid_explicit_decision_cannot_fall_back_to_safe_true(self):
+        with self.assertRaisesRegex(ValueError,"unrecognized decision"):
+            parse_decision({"decision":"maybe","safe":True})
+
 
 class CostTests(unittest.TestCase):
     def test_cost_calculation(self):
@@ -39,6 +43,11 @@ class CostTests(unittest.TestCase):
                              max_total_usd=0.001)
         with self.assertRaises(RuntimeError):
             asyncio.run(quota.record("provider-x", "model-x", 1000, 500))
+
+    def test_unknown_model_pricing_is_not_silently_zero(self):
+        quota=QuotaTracker(max_total_usd=1.0)
+        with self.assertRaisesRegex(ValueError,"no pricing configured"):
+            quota.validate_model("unlisted-model")
 
 
 class ProviderSafetyTests(unittest.TestCase):
