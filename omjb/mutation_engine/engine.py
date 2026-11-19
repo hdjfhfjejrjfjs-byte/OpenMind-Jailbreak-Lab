@@ -60,6 +60,7 @@ class Engine:
     if candidate.dedup in seen:
      counts["skipped"]+=1; self.tracer.write({"event":"skip","idx":candidate.idx,"reason":"dedup","key":candidate.dedup,"spec_hash":self.spec.hash()}); continue
     seen.add(candidate.dedup)
+    estimate=0.0
     try:
      estimate=float(self.estimate_cost(candidate.payload))
      if estimate<0 or not __import__("math").isfinite(estimate):
