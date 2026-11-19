@@ -9,6 +9,7 @@ from omjb.mutation_engine.chat_completions import (
     MultiProviderEvalResult,
     MultiProviderEvaluator,
     parse_provider_spec,
+    run_campaign_from_specs,
 )
 from omjb.probes import Probe
 from omjb.targets import Generation
@@ -32,6 +33,15 @@ class MultiProviderEvaluatorTests(unittest.TestCase):
         self.assertEqual(parse_provider_spec("ollama:qwen2.5:14b").model, "qwen2.5:14b")
         with self.assertRaisesRegex(ValueError, "PROVIDER:MODEL"):
             parse_provider_spec("gemini")
+
+    def test_paid_provider_requires_finite_cost_ceiling(self):
+        with self.assertRaisesRegex(ValueError, "require positive"):
+            run_campaign_from_specs(
+                "unused-corpus.json",
+                targets=["gemini:gemini-test"],
+                max_usd=0,
+                estimated_request_cost=0,
+            )
 
     def test_builds_native_provider_adapters_from_environment(self):
         from omjb.mutation_engine.chat_completions import build_provider
