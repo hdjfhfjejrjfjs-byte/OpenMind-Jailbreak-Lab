@@ -5,6 +5,8 @@ on:
     paths:
       - "omjb/**"
       - "tests/test_omjb.py"
+      - "tests/test_guard_review.py"
+      - "tests/test_downloaders.py"
       - "corpus/omjb_probes.json"
       - "pyproject.toml"
       - ".github/workflows/omjb-tests.yml"
@@ -13,6 +15,8 @@ on:
     paths:
       - "omjb/**"
       - "tests/test_omjb.py"
+      - "tests/test_guard_review.py"
+      - "tests/test_downloaders.py"
       - "corpus/omjb_probes.json"
       - "pyproject.toml"
       - ".github/workflows/omjb-tests.yml"
@@ -25,3 +29,5 @@ jobs:
         with:
           python-version: "3.11"
       - run: python -m unittest discover -s tests -p 'test_omjb.py' -v
+      - run: python -m unittest discover -s tests -p 'test_guard_review.py' -v
+      - run: python -m unittest discover -s tests -p 'test_downloaders.py' -v
