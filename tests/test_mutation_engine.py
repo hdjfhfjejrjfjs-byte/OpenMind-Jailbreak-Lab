@@ -3,6 +3,7 @@ import unittest
 from omjb.mutation_engine import Engine, Verdict, load_spec, rebuild
 from omjb.mutation_engine.dedup import dedup_key
 from omjb.mutation_engine.rng import derive_rng
+from omjb.probes import Probe
 
 class MutationEngineTests(unittest.TestCase):
     def test_rng_and_dedup(self):
@@ -17,7 +18,7 @@ class MutationEngineTests(unittest.TestCase):
     def test_requires_review_gate(self):
         spec=load_spec({"stages":[{"name":"f","arms":["format.quote"]}]})
         with self.assertRaisesRegex(ValueError,"approved_benign"):
-            Engine(spec,"benign public info",lambda _:Verdict(True))
+            Engine(spec,Probe("p","benign","public info","comply"),lambda _:Verdict(True),approved_benign=True,estimate_cost=lambda _:0.0)
 
     def test_replay_and_budget(self):
         import tempfile
@@ -26,7 +27,7 @@ class MutationEngineTests(unittest.TestCase):
             trace=Path(directory)/"trace.jsonl"
             spec=load_spec({"seed":4,"budget":{"max_candidates":1,"max_build_attempts":4},
                 "stages":[{"name":"f","arms":["format.quote"]}]})
-            report=Engine(spec,"public library hours",lambda _:Verdict(True),
+            report=Engine(spec,Probe("p","benign","public library hours","comply",meta={"mutation_safe":True}),lambda _:Verdict(True),
                 approved_benign=True,estimate_cost=lambda _:0.0,trace_path=str(trace)).run()
             self.assertEqual(report.submitted,1)
             rec=next(json.loads(x) for x in trace.read_text().splitlines()
@@ -38,7 +39,7 @@ class MutationEngineTests(unittest.TestCase):
         spec=load_spec({"budget":{"max_candidates":1},"stages":[
             {"name":"encode","arms":["encoding.base64"]},
             {"name":"format","arms":["format.quote"]}]})
-        report=Engine(spec,"benign text",lambda _:Verdict(True),approved_benign=True,estimate_cost=lambda _:0.0).run()
+        report=Engine(spec,Probe("p","benign","benign text","comply",meta={"mutation_safe":True}),lambda _:Verdict(True),approved_benign=True,estimate_cost=lambda _:0.0).run()
         self.assertEqual(report.submitted,0)
         self.assertEqual(report.skipped,1)
 
