@@ -20,16 +20,19 @@ are derived from the spec and registry and are excluded from the canonical hash.
 
 ## Structured regions
 
-omjb.mutation_engine.regions provides RegionValue(prefix, blob, blob_kind,
-suffix), Region, apply_region(), and region_compatible(). Prefix and suffix
-transforms change only that region and preserve the blob byte-for-byte and its
-Kind. Blob transforms are compatible only when the declared input kind matches
-blob_kind. Whole-value transforms remain kind-gated and return a new
-representation with the declared output kind.
+The engine now carries RegionValue(prefix, blob, blob_kind, suffix) through
+pipelines. Transform metadata declares touches="all", "prefix", "blob", or
+"suffix". Prefix and suffix transforms preserve the blob byte-for-byte and keep
+its Kind; blob transforms require an exact blob-kind match; whole-value
+transforms remain kind-gated. Structured-value creation is explicit through a
+transform declaring structured_output=true.
 
-This is a typed foundation for benign property-preserving transforms. Current
-built-ins remain whole-value transforms; region operations are explicit utilities
-and are not silently mixed into the existing string pipeline.
+The benign built-ins include format.segment_fixture, encoding.base64_blob, and
+unicode.prefix_nfc. The example configs/mutation-regions.example.json composes
+them as a reviewed fixture header, Base64 body, and prefix-only normalization.
+No instruction-wrapper obfuscation or concealment transform is registered.
+Trace entries record each selected transform's touches scope, and replay uses
+the same typed dispatch.
 
 ## Safety gate
 
