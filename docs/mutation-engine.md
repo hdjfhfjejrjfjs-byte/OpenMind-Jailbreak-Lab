@@ -35,3 +35,8 @@ fails if a transform version has changed.
 Extensions register through @transform(...) or a dedicated Registry instance.
 Third-party transforms must declare input/output kinds, cost, semantic delta,
 tags, and version. The engine rejects transforms with nonzero semantic_delta.
+
+For a positive USD budget, Engine requires an estimate_cost callback. It must
+return a conservative upper-bound estimate for each candidate before submission.
+Candidates whose reservation would exceed the remaining budget are not sent.
+The engine reconciles the reported actual cost against the reservation.
