@@ -84,7 +84,7 @@ class ProviderEvaluationPipeline:
             provider = self.registry.get(provider_name)
             allowed_ids = {row.probe_id for row in guard_report.results
                            if row.decision == "allow"}
-            selected = [probe for probe in evaluated if probe.id in allowed_ids]
+            # Only explicitly human-reviewed benign probes may be forwarded to a model API.\n            selected = [probe for probe in evaluated\n                        if probe.id in allowed_ids and probe.expected == "comply"\n                        and probe.meta.get("mutation_safe") is True]
             semaphore = asyncio.Semaphore(concurrency)
 
             async def inspect(probe: Probe) -> ProviderResult:
