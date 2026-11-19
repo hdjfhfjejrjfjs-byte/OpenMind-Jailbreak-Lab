@@ -27,7 +27,7 @@ class MutationEngineTests(unittest.TestCase):
             spec=load_spec({"seed":4,"budget":{"max_candidates":1,"max_build_attempts":4},
                 "stages":[{"name":"f","arms":["format.quote"]}]})
             report=Engine(spec,"public library hours",lambda _:Verdict(True),
-                approved_benign=True,trace_path=str(trace)).run()
+                approved_benign=True,estimate_cost=lambda _:0.0,trace_path=str(trace)).run()
             self.assertEqual(report.submitted,1)
             rec=next(json.loads(x) for x in trace.read_text().splitlines()
                      if json.loads(x)["event"]=="candidate")
@@ -38,7 +38,7 @@ class MutationEngineTests(unittest.TestCase):
         spec=load_spec({"budget":{"max_candidates":1},"stages":[
             {"name":"encode","arms":["encoding.base64"]},
             {"name":"format","arms":["format.quote"]}]})
-        report=Engine(spec,"benign text",lambda _:Verdict(True),approved_benign=True).run()
+        report=Engine(spec,"benign text",lambda _:Verdict(True),approved_benign=True,estimate_cost=lambda _:0.0).run()
         self.assertEqual(report.submitted,0)
         self.assertEqual(report.skipped,1)
 
