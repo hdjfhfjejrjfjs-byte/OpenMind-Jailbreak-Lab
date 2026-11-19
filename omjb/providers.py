@@ -28,7 +28,9 @@ class CostTable:
         self.pricing = dict(pricing or DEFAULT_PRICING)
 
     def cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
-        input_rate, output_rate = self.pricing.get(model, (0.0, 0.0))
+        if model not in self.pricing:
+            raise ValueError(f"no pricing configured for model {model!r}")
+        input_rate, output_rate = self.pricing[model]
         return (input_tokens * input_rate + output_tokens * output_rate) / 1_000_000
 
 
@@ -45,6 +47,10 @@ class QuotaTracker:
         self.max_tokens_per_model = max_tokens_per_model
         self._records: dict[tuple[str, str], dict[str, int]] = {}
         self._lock = asyncio.Lock()
+
+    def validate_model(self, model: str) -> None:
+        if model not in self.cost_table.pricing:
+            raise ValueError(f"no pricing configured for model {model!r}; add a reviewed rate before provider calls")
 
     async def record(self, provider: str, model: str, input_tokens: int,
                      output_tokens: int) -> None:
@@ -103,7 +109,9 @@ async def _post_with_retry(url: str, *, headers: dict[str, str],
                 return data
         except httpx.HTTPStatusError as exc:
             last = exc
-            if exc.response.status_code not in (429, 500, 502, 503, 504):
+            # Retry only explicit rate-limit responses; retrying ambiguous 5xx
+            # responses can duplicate a provider request that was already billed.
+            if exc.response.status_code != 429:
                 raise
             retry_after = exc.response.headers.get("retry-after")
             try:
@@ -144,6 +152,7 @@ class OpenAICompatProvider(BaseProvider):
 
     async def complete(self, model: str, messages: list[dict[str, str]], *,
                        max_tokens: int = 512, temperature: float = 0.0) -> Completion:
+        self.quota.validate_model(model)
         data = await _post_with_retry(
             self.base_url + "/chat/completions",
             headers={"Authorization": f"Bearer {self._api_key}"},
@@ -167,6 +176,7 @@ class AnthropicProvider(BaseProvider):
 
     async def complete(self, model: str, messages: list[dict[str, str]], *,
                        max_tokens: int = 512, temperature: float = 0.0) -> Completion:
+        self.quota.validate_model(model)
         system = "\n".join(m["content"] for m in messages if m.get("role") == "system")
         rest = [{"role": m["role"], "content": m["content"]}
                 for m in messages if m.get("role") != "system"]
