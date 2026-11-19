@@ -98,6 +98,8 @@ class ConcurrentChatCompletionsEvaluator:
         if max_usd == 0 and estimated_request_cost > 0:
             raise ValueError("a positive request estimate requires a positive max_usd budget")
         self.url = _validate_endpoint(endpoint)
+        parsed_endpoint = urlparse(self.url)
+        self.endpoint_label = f"{parsed_endpoint.scheme}://{parsed_endpoint.hostname}" + (f":{parsed_endpoint.port}" if parsed_endpoint.port else "") + parsed_endpoint.path
         self.model = model
         self.api_key = api_key
         self.timeout = min(float(timeout), float(max_seconds))
@@ -199,7 +201,7 @@ class ConcurrentChatCompletionsEvaluator:
         output = {
             "schema_version": 1,
             "model": self.model,
-            "endpoint": self.url,
+            "endpoint": self.endpoint_label,
             "requested": len(probes),
             "submitted": sum(not item.error for item in results),
             "errors": sum(bool(item.error) for item in results),
