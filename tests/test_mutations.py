@@ -23,6 +23,7 @@ class MutationEngineTests(unittest.TestCase):
         self.assertTrue(any("parser_robustness" in case.families for case in first))
         self.assertTrue(generate_procedural(probe))
         self.assertTrue(generate(probe))
+        self.assertTrue(MutationEngine(max_variants=1).generate_procedural(probe))
 
     def test_mutations_require_explicit_benign_review(self):
         probe = Probe("unreviewed", "test", "Explain a calendar invite.", "comply")
