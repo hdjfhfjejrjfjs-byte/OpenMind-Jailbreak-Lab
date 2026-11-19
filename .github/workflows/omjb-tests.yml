@@ -7,19 +7,22 @@ on:
       - "tests/test_omjb.py"
       - "tests/test_guard_review.py"
       - "tests/test_downloaders.py"
+      - "tests/test_real_parquet_corpus.py"
       - "tests/test_async_provider_eval.py"
       - "tests/test_mutations.py"
       - "corpus/omjb_probes.json"
       - "pyproject.toml"
       - ".github/workflows/omjb-tests.yml"
   push:
-    branches: [main]
+    branches: [main, feat/async-provider-evaluation]
     paths:
       - "omjb/**"
       - "tests/test_omjb.py"
       - "tests/test_guard_review.py"
       - "tests/test_downloaders.py"
+      - "tests/test_real_parquet_corpus.py"
       - "tests/test_async_provider_eval.py"
+      - "tests/test_mutations.py"
       - "corpus/omjb_probes.json"
       - "pyproject.toml"
       - ".github/workflows/omjb-tests.yml"
@@ -31,9 +34,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python -m pip install -e ".[api]"
+      - run: python -m pip install -e '.[api,parquet]'
       - run: python -m unittest discover -s tests -p 'test_omjb.py' -v
       - run: python -m unittest discover -s tests -p 'test_guard_review.py' -v
       - run: python -m unittest discover -s tests -p 'test_downloaders.py' -v
+      - run: python -m unittest discover -s tests -p 'test_real_parquet_corpus.py' -v
+        env:
+          OMJB_RUN_EXTERNAL_CORPUS_TESTS: '1'
       - run: python -m unittest discover -s tests -p 'test_async_provider_eval.py' -v
       - run: python -m unittest discover -s tests -p 'test_mutations.py' -v
