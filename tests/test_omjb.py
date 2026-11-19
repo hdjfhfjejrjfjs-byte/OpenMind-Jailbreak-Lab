@@ -1,4 +1,4 @@
-import json,sqlite3,tempfile,unittest,time
+import json,sqlite3,tempfile,unittest,time,time
 from pathlib import Path
 from omjb.probes import load_probes,Probe
 from omjb.targets import EchoTarget,Message,OpenAICompatTarget,GeminiTarget
@@ -171,29 +171,6 @@ class OMJBTests(unittest.TestCase):
             self.assertEqual(export_jsonl(s,rid,str(Path(tmp)/"out.jsonl")),1)
             self.assertEqual(export_csv(s,rid,str(Path(tmp)/"out.csv")),1); s.close()
 
-
-
-LEGACY_SCHEMA = """
-CREATE TABLE runs(id INTEGER PRIMARY KEY, name TEXT, target TEXT, config TEXT, started_at REAL, finished_at REAL);
-CREATE TABLE results(id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL, probe_id TEXT, probe_category TEXT, prompt TEXT, system TEXT, response TEXT, response_sha256 TEXT, detector_label TEXT, detector_score REAL, detector_reason TEXT, bypass INTEGER, meta TEXT, created_at REAL, pipeline_result TEXT, provenance TEXT);
-CREATE TABLE adjudications(id INTEGER PRIMARY KEY, result_id INTEGER NOT NULL, label TEXT, notes TEXT, adjudicated_at REAL);
-CREATE TABLE guard_observations(id INTEGER PRIMARY KEY, result_id INTEGER NOT NULL, stage TEXT NOT NULL, decision TEXT NOT NULL, findings TEXT NOT NULL, created_at REAL);
-"""
-
-def _populate_legacy_db(path):
-    conn = sqlite3.connect(path)
-    conn.executescript(LEGACY_SCHEMA)
-    now = time.time()
-    conn.execute("INSERT INTO runs(id,name,target,config,started_at,finished_at) VALUES(1,'legacy-run','echo','{}',?,?)", (now - 100, now - 50))
-    for i, probe_id in enumerate(["p1", "p2"], 1):
-        conn.execute("INSERT INTO results(id,run_id,probe_id,probe_category,prompt,detector_label,created_at) VALUES(?,1,?,?,?,?,?)", (i, probe_id, "cat", f"prompt-{i}", "compliance", now - 10 + i))
-    conn.execute("INSERT INTO adjudications(id,result_id,label,notes,adjudicated_at) VALUES(1,1,'refusal','first pass',?)", (now - 5,))
-    conn.execute("INSERT INTO adjudications(id,result_id,label,notes,adjudicated_at) VALUES(2,1,'compliance','second pass',?)", (now - 4,))
-    conn.execute("INSERT INTO adjudications(id,result_id,label,notes,adjudicated_at) VALUES(3,2,'partial','single pass',?)", (now - 3,))
-    conn.commit()
-    conn.close()
-
-
     def test_populated_legacy_db_migrates_without_data_loss(self):
         db = Path(tempfile.mkdtemp()) / "legacy.db"
         _populate_legacy_db(str(db))
@@ -284,5 +261,6 @@ def _populate_legacy_db(path):
             self.assertEqual({r["probe_id"] for r in pending_alice}, {"p2"})
         finally:
             store.close()
+
 
 if __name__=="__main__": unittest.main()
