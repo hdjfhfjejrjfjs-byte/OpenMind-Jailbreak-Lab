@@ -102,7 +102,7 @@ Verify the environment:
 python --version
 ```
 
-No additional packages need to be installed for the current standard-library implementation.
+The repository's existing root-level tools use the Python standard library. The integrated OMJB package can be installed as an editable package; see [OMJB installation and operator guide](omjb/INSTALLATION.md) for CLI setup, optional YAML/Parquet/API extras, provider setup, and corpus workflows.
 
 ---
 
@@ -725,6 +725,23 @@ python -m unittest discover -s tests -v
 ```
 
 Review the failing test and traceback before changing project files.
+
+---
+
+## OMJB evaluation harness (integrated package)
+
+OMJB is an additive provider-neutral runner, SQLite evidence store, provenance-aware importer, and defensive guard-review workspace. Install it from the repository root with Python 3.10+:
+
+```bash
+python -m pip install -e .
+# Optional integrations:
+python -m pip install -e '.[yaml,parquet,api]'
+python -m unittest discover -s tests -v
+python -m omjb.cli list
+python -m omjb.cli run --suite guardrail-lab --case GL-001 --name smoke --target echo
+```
+
+The `api` extra enables async HTTP/provider clients and the `omjb-remote` / `omjb-mutate` commands; Parquet requires the `parquet` extra. The provider evaluation pipeline forwards only explicitly reviewed benign probes to model APIs. The mutation engine requires a human-review gate and is limited to benign robustness transforms. Read [OMJB installation and operator guide](omjb/INSTALLATION.md), [remote evaluation](docs/remote-evaluation.md), and [mutation engine](docs/mutation-engine.md) before live use.
 
 ---
 
