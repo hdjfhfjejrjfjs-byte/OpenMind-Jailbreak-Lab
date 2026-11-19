@@ -137,6 +137,15 @@ class Engine:
                     verdict=self.submit(candidate.payload)
                     if not isinstance(verdict,Verdict):
                         raise TypeError("submit must return Verdict")
+                    import math
+                    if not isinstance(verdict.allowed,bool):
+                        raise TypeError("Verdict.allowed must be boolean")
+                    for field_name in ("latency_ms","cost_usd"):
+                        field_value=getattr(verdict,field_name)
+                        if isinstance(field_value,bool) or not isinstance(field_value,(int,float)) or not math.isfinite(field_value) or field_value<0:
+                            raise ValueError(f"Verdict.{field_name} must be finite and non-negative")
+                    if verdict.error is not None and not isinstance(verdict.error,str):
+                        raise TypeError("Verdict.error must be a string or None")
                 except Exception as exc:
                     verdict=Verdict(False,error=f"{type(exc).__name__}: {exc}")
                 self.budget.spent_candidates+=1
@@ -164,6 +173,7 @@ def rebuild(spec,target,record,registry:Registry=REGISTRY):
     rng=derive_rng(spec.seed,record["idx"]); value=target; kind=Kind.TEXT
     stages={stage.name:stage for stage in spec.stages}
     previous_index=-1
+    used_stages=set()
     for arm in record["arms"]:
         stage_name=arm["stage"]
         if stage_name not in stages:
@@ -172,6 +182,7 @@ def rebuild(spec,target,record,registry:Registry=REGISTRY):
         if stage_index<=previous_index:
             raise ValueError("trace stages are duplicated or out of order")
         previous_index=stage_index
+        used_stages.add(stage_name)
         configured=next((a for a in stages[stage_name].arms
                          if a.name==arm["name"] and a.params==arm["params"]),None)
         if configured is None:
@@ -184,6 +195,9 @@ def rebuild(spec,target,record,registry:Registry=REGISTRY):
         if not _compatible(ts,value,kind):
             raise ValueError("trace contains an incompatible transform sequence")
         value,kind=_apply(ts,value,rng,arm["params"])
+    missing=[stage.name for stage in spec.stages if not stage.optional and stage.name not in used_stages]
+    if missing:
+        raise ValueError("trace omits required stages: "+", ".join(missing))
     rebuilt=value.render() if isinstance(value,RegionValue) else value
     fingerprint=hashlib.sha256(rebuilt.encode()).hexdigest()
     if record.get("payload_sha256") and record["payload_sha256"]!=fingerprint:

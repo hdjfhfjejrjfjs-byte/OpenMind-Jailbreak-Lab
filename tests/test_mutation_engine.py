@@ -85,6 +85,13 @@ class MutationEngineTests(unittest.TestCase):
         self.assertEqual(changed.blob_kind,Kind.HEX)
         self.assertEqual((changed.prefix,changed.suffix),("",""))
 
+    def test_replay_rejects_missing_required_stage(self):
+        spec=load_spec({"stages":[
+            {"name":"first","arms":["format.quote"]},
+            {"name":"second","arms":["format.json"]}]})
+        with self.assertRaisesRegex(ValueError,"omits required stages"):
+            rebuild(spec,"hello",{"idx":0,"spec_hash":spec.hash(),"arms":[]})
+
     def test_replay_rejects_spec_mismatch(self):
         spec=load_spec({"stages":[{"name":"format","arms":["format.quote"]}]})
         with self.assertRaisesRegex(ValueError,"spec hash mismatch"):
@@ -117,6 +124,39 @@ class MutationEngineTests(unittest.TestCase):
             lambda _:Verdict(True),approved_benign=True,estimate_cost=lambda _:(_ for _ in ()).throw(RuntimeError("estimate failed"))).run()
         self.assertEqual(report.submitted,0)
         self.assertEqual(report.errors,1)
+
+    def test_duplicate_stage_names_are_rejected(self):
+        with self.assertRaisesRegex(ValueError,"duplicate stage name"):
+            load_spec({"stages":[
+                {"name":"same","arms":["format.quote"]},
+                {"name":"same","arms":["format.json"]}]})
+
+    def test_arm_params_must_be_an_object(self):
+        with self.assertRaisesRegex(ValueError,"params must be an object"):
+            load_spec({"stages":[{"name":"format","arms":[
+                {"name":"format.quote","params":["not","a","mapping"]}]}]})
+
+    def test_transform_cost_must_be_finite(self):
+        registry=Registry()
+        with self.assertRaisesRegex(ValueError,"finite and non-negative"):
+            registry.register(TransformSpec("bad.cost",lambda x,r:x,cost=float("nan")))
+
+    def test_budget_rejects_fractional_and_nonfinite_limits(self):
+        from omjb.mutation_engine.budget import Budget
+        with self.assertRaisesRegex(ValueError,"max_candidates must be an integer"):
+            Budget.from_dict({"max_candidates":1.5})
+        with self.assertRaisesRegex(ValueError,"max_usd must be finite"):
+            Budget.from_dict({"max_usd":float("inf")})
+
+    def test_invalid_verdict_metadata_is_counted_as_error(self):
+        spec=load_spec({"budget":{"max_candidates":1,"max_build_attempts":2},
+            "stages":[{"name":"format","arms":["format.quote"]}]})
+        invalid=Verdict(True,latency_ms=float("nan"))
+        report=Engine(spec,Probe("p","benign","public library hours","comply",meta={"mutation_safe":True}),
+            lambda _:invalid,approved_benign=True,estimate_cost=lambda _:0.0).run()
+        self.assertEqual(report.submitted,1)
+        self.assertEqual(report.errors,1)
+        self.assertEqual(report.allowed,0)
 
     def test_region_pipeline_preserves_blob_and_replays(self):
         import base64
