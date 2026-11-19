@@ -2,7 +2,11 @@ import asyncio
 import unittest
 
 from omjb.async_harness import parse_decision
-from omjb.providers import CostTable, QuotaTracker
+from omjb.providers import CostTable, QuotaTracker, ProviderRegistry, Completion
+from omjb.provider_eval import ProviderEvaluationPipeline
+from omjb.async_harness import EndpointReport, EndpointResult
+from omjb.probes import Probe
+from unittest.mock import patch
 
 
 class DecisionParsingTests(unittest.TestCase):
@@ -35,6 +39,48 @@ class CostTests(unittest.TestCase):
                              max_total_usd=0.001)
         with self.assertRaises(RuntimeError):
             asyncio.run(quota.record("provider-x", "model-x", 1000, 500))
+
+
+class ProviderSafetyTests(unittest.TestCase):
+    def test_only_reviewed_benign_probes_reach_provider(self):
+        class FakeProvider:
+            name = "fake"
+            async def complete(self, model, messages, *, max_tokens=256):
+                return Completion(messages[0]["content"], "fake", model, 1, 1)
+
+        class FakeHarness:
+            def __init__(self, endpoint, **kwargs):
+                self.endpoint = endpoint
+            async def run(self, probes):
+                rows=[EndpointResult(p.id,p.category,"allow",0.0,{}) for p in probes]
+                return EndpointReport(self.endpoint,len(rows),len(rows),0,0,0,rows)
+
+        registry=ProviderRegistry()
+        registry.add(FakeProvider())
+        safe=Probe("safe","benign","What time does the public library open?","comply",
+                   meta={"mutation_safe":True})
+        unreviewed=Probe("unreviewed","benign","Summarize a public notice.","comply")
+        attack=Probe("attack","attack","unsafe test fixture","refuse",
+                     meta={"mutation_safe":True})
+        with patch("omjb.provider_eval.AsyncGuardrailHarness",FakeHarness):
+            result=asyncio.run(ProviderEvaluationPipeline(registry).run(
+                [safe,unreviewed,attack],endpoint="https://guard.example/evaluate",
+                provider_name="fake",model="test-model"))
+        self.assertEqual([row.probe_id for row in result.provider_results],["safe"])
+
+    def test_remote_guard_endpoint_rejects_plain_http(self):
+        from omjb.async_harness import AsyncGuardrailHarness
+        with self.assertRaisesRegex(ValueError,"HTTPS"):
+            AsyncGuardrailHarness("http://guard.example/evaluate")
+        AsyncGuardrailHarness("http://127.0.0.1:8000/evaluate")
+
+    def test_provider_base_url_rejects_plain_http(self):
+        from omjb.providers import OpenAICompatProvider
+        with self.assertRaisesRegex(ValueError,"HTTPS"):
+            OpenAICompatProvider("http://api.example/v1","secret",name="test",
+                                 quota=QuotaTracker())
+        OpenAICompatProvider("http://localhost:8080/v1","local",name="local",
+                             quota=QuotaTracker())
 
 
 if __name__ == "__main__":
