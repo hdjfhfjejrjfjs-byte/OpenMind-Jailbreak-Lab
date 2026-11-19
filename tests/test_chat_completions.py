@@ -69,7 +69,8 @@ class MultiProviderEvaluatorTests(unittest.TestCase):
             output = Path(directory) / "report.json"
             report = evaluator.run_campaign(probes, str(output))
             self.assertEqual(report["requested"], 4)
-            self.assertEqual(report["submitted"], 4)
+            self.assertEqual(report["completed_results"], 4)
+            self.assertEqual(report["successful_responses"], 4)
             self.assertEqual(report["human_review_required"], 4)
             self.assertEqual({row["provider"] for row in report["results"]},
                              {"gemini", "anthropic"})
