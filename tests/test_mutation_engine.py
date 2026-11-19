@@ -1,8 +1,11 @@
 import json
 import unittest
+import warnings
 from omjb.mutation_engine import Engine, Verdict, load_spec, rebuild
 from omjb.mutation_engine.dedup import dedup_key
 from omjb.mutation_engine.rng import derive_rng
+from omjb.mutation_engine.regions import Region, RegionValue, apply_region, region_compatible
+from omjb.mutation_engine.core import Kind
 from omjb.probes import Probe
 
 class MutationEngineTests(unittest.TestCase):
@@ -42,6 +45,47 @@ class MutationEngineTests(unittest.TestCase):
         report=Engine(spec,Probe("p","benign","benign text","comply",meta={"mutation_safe":True}),lambda _:Verdict(True),approved_benign=True,estimate_cost=lambda _:0.0).run()
         self.assertEqual(report.submitted,0)
         self.assertEqual(report.skipped,1)
+
+    def test_reachability_warns_on_dead_arm(self):
+        data={"stages":[{"name":"format","arms":["format.quote"]},
+                        {"name":"bad","optional":True,"arms":["encoding.base64","format.json"]},
+                        {"name":"later","optional":True,"arms":["encoding.hex"]}]}
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            spec=load_spec(data)
+        self.assertEqual(len(spec.diagnostics),1)
+        self.assertIn("bad.encoding.base64",spec.diagnostics[0])
+        self.assertEqual(len(caught),1)
+
+    def test_strict_reachability_rejects_dead_arm(self):
+        with self.assertRaisesRegex(ValueError,"unreachable arms"):
+            load_spec({"stages":[{"name":"first","arms":["format.quote"]},
+                                 {"name":"second","optional":True,"arms":["encoding.base64"]},
+                                 {"name":"third","optional":True,"arms":["format.json"]}]},
+                      strict_reachability=True)
+
+    def test_required_stage_without_reachable_arm_fails(self):
+        with self.assertRaisesRegex(ValueError,"no reachable arms"):
+            load_spec({"stages":[{"name":"encode","arms":["encoding.base64"]},
+                                 {"name":"text-only","arms":["format.quote"]}]})
+
+    def test_region_transform_preserves_encoded_blob(self):
+        value=RegionValue("Test input: ","YWJj",Kind.BASE64," [fixture]")
+        self.assertTrue(region_compatible(value,touches=Region.PREFIX,input_kind=Kind.TEXT))
+        changed=apply_region(value,touches=Region.PREFIX,fn=lambda s:s.upper())
+        self.assertEqual(changed.prefix,"TEST INPUT: ")
+        self.assertEqual(changed.blob,"YWJj")
+        self.assertEqual(changed.blob_kind,Kind.BASE64)
+        self.assertEqual(changed.suffix," [fixture]")
+        self.assertFalse(region_compatible(value,touches=Region.BLOB,input_kind=Kind.TEXT))
+        self.assertTrue(region_compatible(value,touches=Region.BLOB,input_kind=Kind.BASE64))
+
+    def test_whole_region_transform_resets_to_declared_output_kind(self):
+        value=RegionValue("head","body",Kind.TEXT,"tail")
+        changed=apply_region(value,touches=Region.ALL,fn=str.upper,output_kind=Kind.HEX)
+        self.assertEqual(changed.render(),"HEADBODYTAIL")
+        self.assertEqual(changed.blob_kind,Kind.HEX)
+        self.assertEqual((changed.prefix,changed.suffix),("",""))
 
 if __name__ == "__main__":
     unittest.main()
