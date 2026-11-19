@@ -13,6 +13,8 @@
 
 **Probe the boundary. Measure the response. Preserve the evidence.**
 
+**[Try it in your browser — live Hugging Face Space](https://huggingface.co/spaces/Grimxlock/OpenMind-Jailbreak-Lab)** · Run the real 76-case Guardrail Lab suite against Gemini with your own free API key. No install needed.
+
 [Quick start](#-quick-start) · [What’s inside](#-whats-inside) · [Providers](#-provider-matrix) · [Run a campaign](#-run-a-multi-provider-campaign) · [Docs](#-documentation)
 
 </div>
@@ -117,6 +119,8 @@ Read: [Multi-provider evaluator guide](docs/chat-completions-evaluator.md)
 The wider Guardrail Lab adapter matrix also documents GLM/Zhipu, Moonshot, NVIDIA NIM, OpenRouter, and compatible local/server endpoints. Support depends on the adapter, model identifier, endpoint, credentials, and provider limits.
 
 ## // Quick start
+
+No install? Run the lab in your browser instead: [live Hugging Face Space](https://huggingface.co/spaces/Grimxlock/OpenMind-Jailbreak-Lab).
 
 **Requirements:** Python 3.10+ and Git.
 
