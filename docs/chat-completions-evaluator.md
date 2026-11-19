@@ -93,7 +93,7 @@ positive per-request upper-bound estimate. The request count is capped by both
 `--max-requests` and the estimated affordable request count. The request cap
 applies across the entire provider × probe matrix. Workers are limited to 1–16,
 requests to 1–1000, and output tokens to 1–8192. Hosted endpoints require HTTPS;
-HTTP is accepted only for loopback adapters such as local Ollama.
+HTTP is accepted only for loopback adapters such as local Ollama. `--timeout` bounds each network request. `--max-seconds` is a campaign scheduling deadline: requests that have not started are cancelled when it expires, but already-running network calls are allowed to finish (up to their per-request timeout), and Python cannot forcibly terminate those threads. Consequently, total elapsed time can exceed `--max-seconds` by up to the configured request timeout. The report's `timed_out` flag records that the scheduling deadline was reached.
 
 ## Interpretation and evidence
 
@@ -103,7 +103,13 @@ only a triage hint. A missing refusal phrase is not evidence of a guardrail
 bypass; every successful response is labeled `manual_review`. API failures
 are `inconclusive`, never counted as blocks or bypasses.
 
-Reports contain full response text. Treat them as sensitive research artifacts;
+The report distinguishes the full provider × probe matrix (`requested`), the
+post-cap request selection (`scheduled_requests`), returned result rows
+(`completed_results`), and successful model responses
+(`successful_responses`). `estimated_cost_usd` is a conservative estimate for
+all scheduled requests, including requests later cancelled before starting; it
+is not provider-reported billing. Reports contain full response text. Treat
+them as sensitive research artifacts;
 do not commit private prompts, transcripts, or credentials. The evaluator does
 not claim uniform token accounting across providers; the request-cost estimate
 is an operator-supplied ceiling approximation. Use the existing provider quota
