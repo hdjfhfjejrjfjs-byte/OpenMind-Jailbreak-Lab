@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from omjb.targets import (
     AnthropicTarget, GeminiTarget, Message, OllamaTarget, OpenAICompatTarget,
-    target_from_env,
+    target_from_env, is_loopback_http_url,
 )
 
 
@@ -54,6 +54,26 @@ class NativeProviderAdapterTests(unittest.TestCase):
         }) as post:
             self.assertEqual(ollama.generate([Message("user", "hello")]).text, "local hello")
         self.assertEqual(post.call_args.args[0], "/api/chat")
+
+    def test_http_endpoint_validation_requires_a_real_loopback_host(self):
+        self.assertTrue(is_loopback_http_url("http://localhost:11434"))
+        self.assertTrue(is_loopback_http_url("http://127.0.0.1:8080/v1"))
+        self.assertTrue(is_loopback_http_url("http://[::1]:8080"))
+        for url in (
+            "http://localhost.attacker.example",
+            "http://127.0.0.1.attacker.example",
+            "http://user@localhost:8080",
+            "http://example.com",
+            "http://localhost:bad-port",
+        ):
+            self.assertFalse(is_loopback_http_url(url), url)
+        for target in (
+            lambda: OpenAICompatTarget("custom", "http://localhost.attacker.example/v1",
+                                       "test-key", "model"),
+            lambda: OllamaTarget("ollama", "http://127.0.0.1.attacker.example", "model"),
+        ):
+            with self.assertRaises(ValueError):
+                target()
 
     def test_vendor_compatible_provider_defaults(self):
         from unittest.mock import patch
