@@ -12,7 +12,7 @@ on:
       - "pyproject.toml"
       - ".github/workflows/omjb-tests.yml"
   push:
-    branches: [main]
+    branches: [main, feat/professional-mutation-engine]
     paths:
       - "omjb/**"
       - "tests/test_omjb.py"
