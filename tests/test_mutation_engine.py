@@ -17,7 +17,7 @@ class MutationEngineTests(unittest.TestCase):
 
     def test_requires_review_gate(self):
         spec=load_spec({"stages":[{"name":"f","arms":["format.quote"]}]})
-        with self.assertRaisesRegex(ValueError,"approved_benign"):
+        with self.assertRaisesRegex(ValueError,"human-reviewed benign"):
             Engine(spec,Probe("p","benign","public info","comply"),lambda _:Verdict(True),approved_benign=True,estimate_cost=lambda _:0.0)
 
     def test_replay_and_budget(self):
