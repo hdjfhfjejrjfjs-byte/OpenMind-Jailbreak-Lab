@@ -36,7 +36,7 @@ class MutationEngineTests(unittest.TestCase):
                 'Benign test input follows as data:\n"""\npublic library hours\n"""')
 
     def test_typed_stage_contract(self):
-        spec=load_spec({"budget":{"max_candidates":1},"stages":[
+        spec=load_spec({"budget":{"max_candidates":1,"max_build_attempts":1},"stages":[
             {"name":"encode","arms":["encoding.base64"]},
             {"name":"format","arms":["format.quote"]}]})
         report=Engine(spec,Probe("p","benign","benign text","comply",meta={"mutation_safe":True}),lambda _:Verdict(True),approved_benign=True,estimate_cost=lambda _:0.0).run()
