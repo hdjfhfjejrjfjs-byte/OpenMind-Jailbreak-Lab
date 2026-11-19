@@ -31,6 +31,8 @@ class Registry:
         if spec.cost<0 or not 0<=spec.semantic_delta<=1 or spec.version<1: raise ValueError("invalid transform metadata")
         if spec.touches not in ("all","prefix","blob","suffix"): raise ValueError("touches must be all, prefix, blob, or suffix")
         if spec.touches!="all" and spec.structured_output: raise ValueError("only whole-value transforms may create structured values")
+        if spec.touches in ("prefix","suffix") and (spec.input_kind is not Kind.TEXT or spec.output_kind is not Kind.TEXT):
+            raise ValueError("prefix and suffix transforms must preserve TEXT kind")
         self._specs[spec.name]=spec
         return spec
     def get(self,name):
