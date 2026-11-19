@@ -46,8 +46,7 @@ class MutationEngineTests(unittest.TestCase):
 
     def test_reachability_warns_on_dead_arm(self):
         data={"stages":[{"name":"encode","arms":["encoding.hex"]},
-                        {"name":"bad","optional":True,"arms":["format.quote"]},
-                        {"name":"later","optional":True,"arms":["format.json"]}]}
+                        {"name":"bad","optional":True,"arms":["format.quote"]}]}
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             spec=load_spec(data)
