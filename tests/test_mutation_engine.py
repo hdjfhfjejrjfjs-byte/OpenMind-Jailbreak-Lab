@@ -32,7 +32,7 @@ class MutationEngineTests(unittest.TestCase):
             rec=next(json.loads(x) for x in trace.read_text().splitlines()
                      if json.loads(x)["event"]=="candidate")
             self.assertEqual(rebuild(spec,"public library hours",rec),
-                'Benign test input follows as data:\\n"""\\npublic library hours\\n"""')
+                'Benign test input follows as data:\n"""\npublic library hours\n"""')
 
     def test_typed_stage_contract(self):
         spec=load_spec({"budget":{"max_candidates":1},"stages":[
