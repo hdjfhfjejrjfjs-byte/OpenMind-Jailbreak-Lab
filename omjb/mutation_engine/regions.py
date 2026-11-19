@@ -1,4 +1,4 @@
-"""Typed segmented values for property-preserving region transforms."""
+"""Structured values and region-preserving transform dispatch."""
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
@@ -26,9 +26,7 @@ class RegionValue:
         return self.prefix+self.blob+self.suffix
 
 def apply_region(value:RegionValue,*,touches:Region,fn:Callable[[str],str],output_kind:Kind|None=None)->RegionValue:
-    """Apply a transform to one region; untouched regions remain byte-identical."""
-    if not isinstance(value,RegionValue):
-        raise TypeError("value must be RegionValue")
+    if not isinstance(value,RegionValue): raise TypeError("value must be RegionValue")
     if touches is Region.ALL:
         changed=fn(value.render())
         if not isinstance(changed,str): raise TypeError("transform must return str")
@@ -48,7 +46,6 @@ def apply_region(value:RegionValue,*,touches:Region,fn:Callable[[str],str],outpu
     raise ValueError(f"unsupported region: {touches!r}")
 
 def region_compatible(value:RegionValue,*,touches:Region,input_kind:Kind=Kind.TEXT)->bool:
-    """Prefix/suffix transforms preserve blob kind; blob/all remain kind-gated."""
     if touches in (Region.PREFIX,Region.SUFFIX): return True
     if touches in (Region.BLOB,Region.ALL): return value.blob_kind is input_kind
     return False
