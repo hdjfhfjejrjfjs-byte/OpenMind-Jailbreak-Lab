@@ -20,11 +20,15 @@ class EngineReport:
  submitted:int; allowed:int; blocked:int; errors:int; skipped:int; by_arm:dict; allow_rate:float
 
 class Engine:
- def __init__(self,spec,target,submit,*,approved_benign=False,registry:Registry=REGISTRY,trace_path=None,scheduler=None):
+ def __init__(self,spec,target,submit,*,approved_benign=False,estimate_cost=None,registry:Registry=REGISTRY,trace_path=None,scheduler=None):
   if approved_benign is not True: raise ValueError("Engine requires explicit approved_benign=True after human review")
   if not isinstance(target,str) or not target.strip(): raise ValueError("target must be non-empty text")
   self.spec,self.target,self.submit,self.registry=spec,target,submit,registry
-  self.budget=Budget.from_dict(spec.budget); self.tracer=Tracer(trace_path); self.scheduler=scheduler or CostAwareUCB()
+  self.budget=Budget.from_dict(spec.budget)
+  if self.budget.max_usd>0 and not callable(estimate_cost):
+   raise ValueError("estimate_cost is required for a positive USD budget")
+  self.estimate_cost=estimate_cost or (lambda payload: 0.0)
+  self.tracer=Tracer(trace_path); self.scheduler=scheduler or CostAwareUCB()
   self._register_arms()
  def _register_arms(self):
   for stage in self.spec.stages:
@@ -57,10 +61,16 @@ class Engine:
      counts["skipped"]+=1; self.tracer.write({"event":"skip","idx":candidate.idx,"reason":"dedup","key":candidate.dedup,"spec_hash":self.spec.hash()}); continue
     seen.add(candidate.dedup)
     try:
+     estimate=float(self.estimate_cost(candidate.payload))
+     if estimate<0 or not __import__("math").isfinite(estimate):
+      raise ValueError("estimated cost must be finite and non-negative")
+     if self.budget.spent_usd+estimate>self.budget.max_usd:
+      self.tracer.write({"event":"skip","idx":candidate.idx,"reason":"usd_budget_reservation","estimate_usd":estimate})
+      break
      verdict=self.submit(candidate.payload)
      if not isinstance(verdict,Verdict): raise TypeError("submit must return Verdict")
     except Exception as exc: verdict=Verdict(False,error=f"{type(exc).__name__}: {exc}")
-    self.budget.spent_candidates+=1; self.budget.spent_usd+=max(0.0,verdict.cost_usd)
+    self.budget.spent_candidates+=1; self.budget.spent_usd+=max(estimate,max(0.0,verdict.cost_usd))
     reward=1.0 if verdict.allowed and not verdict.error else 0.0
     for key in candidate.arm_keys(): self.scheduler.update(key,reward)
     counts["submitted"]+=1
