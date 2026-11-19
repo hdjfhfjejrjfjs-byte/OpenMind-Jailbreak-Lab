@@ -51,7 +51,7 @@ class MultiProviderEvalResult:
 
 
 def _preview(value: str, limit: int) -> str:
-    flat = value.replace("\\n", " ").replace("\\r", " ")
+    flat = value.replace("\n", " ").replace("\r", " ")
     return flat[:limit] + ("..." if len(flat) > limit else "")
 
 
@@ -227,7 +227,7 @@ class MultiProviderEvaluator:
         }
         destination = Path(output_file)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\\n", encoding="utf-8")
+        destination.write_text(json.dumps(output, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         return output
 
 
