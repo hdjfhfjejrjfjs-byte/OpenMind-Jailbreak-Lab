@@ -88,6 +88,11 @@ class Engine:
                 return Candidate(idx,payload,used,dedup_key(payload),True,"no_compatible_arm:"+stage.name)
             keys=[a.key(stage.name) for a in choices]
             selected=self.scheduler.pick(keys)
+            if selected is None:
+                if stage.optional:
+                    continue
+                payload=value.render() if isinstance(value,RegionValue) else value
+                return Candidate(idx,payload,used,dedup_key(payload),True,"all_compatible_arms_pruned:"+stage.name)
             arm=next(a for a in choices if a.key(stage.name)==selected)
             ts=self.registry.get(arm.name)
             try: value,kind=_apply(ts,value,rng,arm.params)
@@ -116,13 +121,24 @@ class Engine:
                 seen.add(candidate.dedup); estimate=0.0
                 try:
                     estimate=float(self.estimate_cost(candidate.payload))
-                    if estimate<0 or not __import__("math").isfinite(estimate): raise ValueError("estimated cost must be finite and non-negative")
-                    if self.budget.spent_usd+estimate>self.budget.max_usd:
-                        self.tracer.write({"event":"skip","idx":candidate.idx,"reason":"usd_budget_reservation","estimate_usd":estimate})
-                        break
+                    if estimate<0 or not __import__("math").isfinite(estimate):
+                        raise ValueError("estimated cost must be finite and non-negative")
+                except Exception as exc:
+                    counts["errors"]+=1
+                    self.tracer.write({"event":"build_error","idx":candidate.idx,
+                        "reason":"cost_estimate_failed","error":f"{type(exc).__name__}: {exc}",
+                        "spec_hash":self.spec.hash()})
+                    continue
+                if self.budget.spent_usd+estimate>self.budget.max_usd:
+                    self.tracer.write({"event":"skip","idx":candidate.idx,
+                        "reason":"usd_budget_reservation","estimate_usd":estimate})
+                    break
+                try:
                     verdict=self.submit(candidate.payload)
-                    if not isinstance(verdict,Verdict): raise TypeError("submit must return Verdict")
-                except Exception as exc: verdict=Verdict(False,error=f"{type(exc).__name__}: {exc}")
+                    if not isinstance(verdict,Verdict):
+                        raise TypeError("submit must return Verdict")
+                except Exception as exc:
+                    verdict=Verdict(False,error=f"{type(exc).__name__}: {exc}")
                 self.budget.spent_candidates+=1
                 self.budget.spent_usd+=max(estimate,max(0.0,verdict.cost_usd))
                 reward=1.0 if verdict.allowed and not verdict.error else 0.0
@@ -143,9 +159,33 @@ class Engine:
         finally: self.tracer.close()
 
 def rebuild(spec,target,record,registry:Registry=REGISTRY):
+    if record.get("spec_hash") != spec.hash():
+        raise ValueError("pipeline spec hash mismatch")
     rng=derive_rng(spec.seed,record["idx"]); value=target; kind=Kind.TEXT
+    stages={stage.name:stage for stage in spec.stages}
+    previous_index=-1
     for arm in record["arms"]:
+        stage_name=arm["stage"]
+        if stage_name not in stages:
+            raise ValueError("trace references an unknown stage")
+        stage_index=next(i for i,s in enumerate(spec.stages) if s.name==stage_name)
+        if stage_index<=previous_index:
+            raise ValueError("trace stages are duplicated or out of order")
+        previous_index=stage_index
+        configured=next((a for a in stages[stage_name].arms
+                         if a.name==arm["name"] and a.params==arm["params"]),None)
+        if configured is None:
+            raise ValueError("trace arm is not present in the pipeline spec")
         ts=registry.get(arm["name"])
-        if ts.version!=arm.get("version",ts.version): raise ValueError("transform version mismatch")
+        if ts.version!=arm.get("version",ts.version):
+            raise ValueError("transform version mismatch")
+        if arm.get("touches",ts.touches)!=ts.touches:
+            raise ValueError("transform region contract mismatch")
+        if not _compatible(ts,value,kind):
+            raise ValueError("trace contains an incompatible transform sequence")
         value,kind=_apply(ts,value,rng,arm["params"])
-    return value.render() if isinstance(value,RegionValue) else value
+    rebuilt=value.render() if isinstance(value,RegionValue) else value
+    fingerprint=hashlib.sha256(rebuilt.encode()).hexdigest()
+    if record.get("payload_sha256") and record["payload_sha256"]!=fingerprint:
+        raise ValueError("replayed payload fingerprint mismatch")
+    return rebuilt
