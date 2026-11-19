@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/neon-probe.svg" alt="Animated neon network security probe scanning a shield target" width="100%">
+<img src="assets/hand-reaching.gif" alt="Animated hand reaching toward the viewer" width="220">
 
 # OPENMIND // JAILBREAK LAB
 
