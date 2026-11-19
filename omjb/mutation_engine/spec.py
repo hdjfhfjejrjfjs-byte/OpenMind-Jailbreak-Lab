@@ -15,8 +15,11 @@ class PipelineSpec:
     stages:list[Stage]
     budget:dict
     diagnostics:list[str]=field(default_factory=list)
+    transform_contracts:dict=field(default_factory=dict)
     def canonical(self):
-        d={"version":self.version,"seed":self.seed,"budget":self.budget,"stages":[{"name":s.name,"optional":s.optional,"arms":[{"name":a.name,"params":a.params} for a in s.arms]} for s in self.stages]}
+        d={"version":self.version,"seed":self.seed,"budget":self.budget,
+           "transform_contracts":self.transform_contracts,
+           "stages":[{"name":s.name,"optional":s.optional,"arms":[{"name":a.name,"params":a.params} for a in s.arms]} for s in self.stages]}
         return json.dumps(d,sort_keys=True,separators=(",",":"),ensure_ascii=False)
     def hash(self):
         return hashlib.sha256(self.canonical().encode()).hexdigest()[:24]
@@ -31,11 +34,15 @@ def validate_spec(spec:PipelineSpec,registry=REGISTRY,*,strict=False):
     """Forward dataflow over (structured, blob-kind) states."""
     states={(False,Kind.TEXT)}
     diagnostics=[]
+    contracts={}
     for index,stage in enumerate(spec.stages):
         compatible=[]
         next_states=set()
         for arm in stage.arms:
             ts=registry.get(arm.name)
+            contracts[arm.name]={"input_kind":ts.input_kind.value,"output_kind":ts.output_kind.value,
+                "touches":ts.touches,"version":ts.version,"structured_output":ts.structured_output,
+                "semantic_delta":ts.semantic_delta}
             matching=[state for state in states if _arm_compatible(ts,state)]
             if matching:
                 compatible.append(arm)
@@ -54,6 +61,7 @@ def validate_spec(spec:PipelineSpec,registry=REGISTRY,*,strict=False):
         if stage.optional: next_states.update(states)
         if compatible: states=next_states
     spec.diagnostics=diagnostics
+    spec.transform_contracts=contracts
     if strict and diagnostics: raise ValueError("pipeline contains unreachable arms: "+"; ".join(diagnostics))
     for message in diagnostics: warnings.warn(message,UserWarning,stacklevel=2)
     return diagnostics
