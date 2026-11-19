@@ -95,10 +95,27 @@ class GeminiTarget(Target,_HTTPMixin):
 def target_from_env(kind,model,base_url=None,api_key_env=None):
     if kind=="echo": return EchoTarget()
     if kind=="ollama": return OllamaTarget(kind,base_url or "http://localhost:11434",model)
-    env=api_key_env or {"gemini":"GEMINI_API_KEY","anthropic":"ANTHROPIC_API_KEY"}.get(kind,"OPENAI_API_KEY")
-    key=os.environ.get(env,"")
-    if not key: raise ValueError(f"missing environment variable {env}")
-    if kind=="gemini": return GeminiTarget(kind,key,model,base_url or "https://generativelanguage.googleapis.com")
-    if kind=="anthropic": return AnthropicTarget(kind,base_url or "https://api.anthropic.com",key,model)
-    if kind in {"openai","openai-compatible"}: return OpenAICompatTarget(kind,base_url or "https://api.openai.com/v1",key,model)
-    raise ValueError(f"unsupported target: {kind}")
+    defaults = {
+        "gemini": ("GEMINI_API_KEY", "https://generativelanguage.googleapis.com"),
+        "anthropic": ("ANTHROPIC_API_KEY", "https://api.anthropic.com"),
+        "openai": ("OPENAI_API_KEY", "https://api.openai.com/v1"),
+        "deepseek": ("DEEPSEEK_API_KEY", "https://api.deepseek.com/v1"),
+        "groq": ("GROQ_API_KEY", "https://api.groq.com/openai/v1"),
+        "together": ("TOGETHER_API_KEY", "https://api.together.xyz/v1"),
+    }
+    if kind == "ollama":
+        return OllamaTarget(kind, base_url or "http://localhost:11434", model)
+    if kind not in defaults and kind != "openai-compatible":
+        raise ValueError(f"unsupported target: {kind}")
+    default_env, default_url = defaults.get(kind, ("OPENAI_API_KEY", None))
+    env = api_key_env or default_env
+    key = os.environ.get(env, "")
+    if not key:
+        raise ValueError(f"missing environment variable {env}")
+    if kind == "gemini":
+        return GeminiTarget(kind, key, model, base_url or default_url)
+    if kind == "anthropic":
+        return AnthropicTarget(kind, base_url or default_url, key, model)
+    if kind == "openai-compatible" and not base_url:
+        raise ValueError("openai-compatible requires an explicit base_url")
+    return OpenAICompatTarget(kind, base_url or default_url, key, model)
