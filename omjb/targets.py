@@ -111,7 +111,11 @@ class OllamaTarget(Target,_HTTPMixin):
         self.name,self.base_url,self.model,self.timeout=name,base_url.rstrip("/"),model,timeout
     def config(self): return {"name":self.name,"class":type(self).__name__,"base_url":self.base_url,"model":self.model}
     def generate(self,messages,**params):
-        start=time.monotonic(); data=self._post("/api/chat",{"model":self.model,"messages":[m.__dict__ for m in messages],"stream":False,"options":_safe_params(params)},{})
+        start=time.monotonic()
+        options = dict(_safe_params(params))
+        if "max_tokens" in options:
+            options["num_predict"] = options.pop("max_tokens")
+        data=self._post("/api/chat",{"model":self.model,"messages":[m.__dict__ for m in messages],"stream":False,"options":options},{})
         try: content=data["message"]["content"]
         except (KeyError,TypeError) as exc: raise RuntimeError("unexpected Ollama response") from exc
         return Generation(content,self.model,{},(time.monotonic()-start)*1000)
