@@ -193,7 +193,8 @@ class MutationEngine:
         if not probe.prompt.strip():
             raise ValueError("probe prompt must not be empty")
 
-    def generate(self, probe: Probe, *, include_chains: bool = True,\n                 max_chain_depth: int | None = None) -> list[MutationCase]:
+    def generate(self, probe: Probe, *, include_chains: bool = True,
+                 max_chain_depth: int | None = None) -> list[MutationCase]:
         self._validate(probe)
         candidates: list[tuple[str, list[str], list[str]]] = []
         for mutation in STATIC_MUTATIONS:
@@ -201,7 +202,9 @@ class MutationEngine:
                 continue
             candidates.append((mutation.apply(probe.prompt), [mutation.name], [mutation.family]))
         if include_chains:
-            for path in self.narrative_graph.paths(\n                max_depth=self.max_chain_depth if max_chain_depth is None else max_chain_depth\n            ):
+            for path in self.narrative_graph.paths(
+                max_depth=self.max_chain_depth if max_chain_depth is None else max_chain_depth
+            ):
                 if len(path) < 2:
                     continue
                 candidates.append((
@@ -235,13 +238,13 @@ class MutationEngine:
         depth = self.max_chain_depth if max_depth is None else max_depth
         if depth < 1:
             raise ValueError("max_depth must be positive")
-        old_depth = self.max_chain_depth
-        try:
-            self.max_chain_depth = depth
-            cases = self.generate(probe, include_chains=True)
-        finally:
-            self.max_chain_depth = old_depth
-        return [case for case in cases if any(n.startswith("narrative:") for n in case.mutation_names)]
+        expanded = MutationEngine(
+            max_variants=self.max_variants + len(STATIC_MUTATIONS),
+            max_chain_depth=depth,
+            include_parser_cases=self.include_parser_cases,
+        ).generate(probe, include_chains=True, max_chain_depth=depth)
+        return [case for case in expanded
+                if any(n.startswith("narrative:") for n in case.mutation_names)][:self.max_variants]
 
 
 def generate(probe: Probe, *, max_variants: int = 32,
