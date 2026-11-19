@@ -7,6 +7,7 @@ from .dedup import dedup_key
 from .rng import derive_rng
 from .scheduler import CostAwareUCB
 from . import transforms as _builtin_transforms
+from ..probes import Probe
 
 class Tracer:
  def __init__(self,path): self.f=open(path,"w",encoding="utf-8") if path else None
@@ -22,8 +23,12 @@ class EngineReport:
 class Engine:
  def __init__(self,spec,target,submit,*,approved_benign=False,estimate_cost=None,registry:Registry=REGISTRY,trace_path=None,scheduler=None):
   if approved_benign is not True: raise ValueError("Engine requires explicit approved_benign=True after human review")
-  if not isinstance(target,str) or not target.strip(): raise ValueError("target must be non-empty text")
-  self.spec,self.target,self.submit,self.registry=spec,target,submit,registry
+  if not isinstance(target,Probe): raise TypeError("target must be an omjb.probes.Probe")
+  if target.expected!="comply" or target.meta.get("mutation_safe") is not True:
+   raise ValueError("mutation requires a human-reviewed benign Probe (expected='comply', meta.mutation_safe=true)")
+  if not target.prompt.strip(): raise ValueError("probe prompt must be non-empty")
+  self.probe=target
+  self.spec,self.target,self.submit,self.registry=spec,target.prompt,submit,registry
   self.budget=Budget.from_dict(spec.budget)
   if self.budget.max_usd>0 and not callable(estimate_cost):
    raise ValueError("estimate_cost is required for a positive USD budget")
