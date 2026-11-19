@@ -9,6 +9,7 @@ import os
 import random
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -132,8 +133,12 @@ class OpenAICompatProvider(BaseProvider):
     def __init__(self, base_url: str, api_key: str, *, name: str,
                  quota: QuotaTracker):
         super().__init__(api_key, quota)
-        if not base_url.startswith(("https://", "http://")):
-            raise ValueError("base_url must be HTTP(S)")
+        parsed = urlparse(base_url)
+        local_hosts = {"localhost", "127.0.0.1", "::1"}
+        if parsed.scheme != "https" and not (parsed.scheme == "http" and parsed.hostname in local_hosts):
+            raise ValueError("base_url must use HTTPS (HTTP is allowed only for loopback)")
+        if not parsed.hostname:
+            raise ValueError("base_url must include a hostname")
         self.base_url = base_url.rstrip("/")
         self.name = name
 
