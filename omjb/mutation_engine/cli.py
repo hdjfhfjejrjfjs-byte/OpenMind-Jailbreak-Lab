@@ -19,27 +19,27 @@ def main(argv=None):
     if argv and argv[0] == "chat-eval":
         parser = argparse.ArgumentParser(prog="omjb-mutate chat-eval")
         parser.add_argument("--corpus", required=True)
-        parser.add_argument("--model", required=True)
-        parser.add_argument("--endpoint")
-        parser.add_argument("--config", help="JSON config (or YAML when the yaml extra is installed)")
-        parser.add_argument("--timeout", type=float)
-        parser.add_argument("--token-env")
-        parser.add_argument("--workers", type=int, default=3)
-        parser.add_argument("--max-requests", type=int, default=50)
+        parser.add_argument("--target", action="append", required=True,
+                            help="provider:model; repeat for a cross-provider campaign (e.g. gemini:gemini-2.5-flash)")
+        parser.add_argument("--base-url", help="custom endpoint for openai-compatible or provider proxy")
+        parser.add_argument("--api-key-env", help="environment variable holding the provider API key")
+        parser.add_argument("--timeout", type=float, default=60)
+        parser.add_argument("--workers", type=int, default=4)
+        parser.add_argument("--max-requests", type=int, default=100)
         parser.add_argument("--max-seconds", type=float, default=300)
         parser.add_argument("--max-usd", type=float, default=0,
-                            help="finite campaign USD ceiling; use 0 only for a free/local endpoint")
+                            help="finite campaign USD ceiling; use 0 only for free/local endpoints")
         parser.add_argument("--estimated-request-cost", type=float, default=0,
-                            help="conservative per-request USD upper bound")
+                            help="conservative upper-bound cost per provider request")
         parser.add_argument("--temperature", type=float, default=0)
         parser.add_argument("--max-tokens", type=int, default=1024)
-        parser.add_argument("--output", default="chat-eval-report.json")
+        parser.add_argument("--output", default="multi-provider-report.json")
         args = parser.parse_args(argv[1:])
-        from .chat_completions import run_from_config
+        from .chat_completions import run_campaign_from_specs
         try:
-            report = run_from_config(
-                args.corpus, model=args.model, config_path=args.config,
-                endpoint=args.endpoint, timeout=args.timeout, token_env=args.token_env,
+            report = run_campaign_from_specs(
+                args.corpus, targets=args.target, base_url=args.base_url,
+                api_key_env=args.api_key_env, timeout=args.timeout,
                 max_workers=args.workers, max_requests=args.max_requests,
                 max_seconds=args.max_seconds, max_usd=args.max_usd,
                 estimated_request_cost=args.estimated_request_cost,
