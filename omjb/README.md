@@ -2,7 +2,7 @@
 
 **New here?** Start with the [OMJB installation and operator guide](INSTALLATION.md) for setup, provider credentials, corpus loading, async evaluation, benign mutation robustness, pipelines, adjudication, and exports.
 
-OMJB is an additive, provider-neutral evaluation package. It does not replace the repository's Guardrail Lab, 76-case suite, benchmark, scanner, original-source metadata browser, or manual-review workspace.
+OMJB is an additive, provider-neutral evaluation package. It does not replace the repository's Guardrail Lab, 76-case suite, benchmark, scanner, original-source metadata browser, or manual-review workspace.\n\nThe bounded concurrent OpenAI-compatible Chat Completions runner is documented in [chat-completions-evaluator.md](../docs/chat-completions-evaluator.md) and runs with `omjb-mutate chat-eval`.
 
 ## Install and run
 
