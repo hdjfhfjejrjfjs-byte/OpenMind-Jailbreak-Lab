@@ -1,6 +1,6 @@
 """Provider adapters for authorized evaluation; standard library only."""
 from __future__ import annotations
-import abc,json,os,time,urllib.error,urllib.parse,urllib.request
+import abc,json,os,time,ipaddress,urllib.error,urllib.parse,urllib.request
 from dataclasses import dataclass,field
 from typing import Any
 
@@ -14,6 +14,52 @@ class Generation:
     model:str=""
     raw:dict=field(default_factory=dict)
     latency_ms:float=0.0
+def _is_loopback_host(host):
+    if not host:
+        return False
+    normalized = host.rstrip(".").lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def is_loopback_http_url(value):
+    """Return True only for plain-HTTP URLs whose parsed host is loopback."""
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        parsed.port
+        return (
+            parsed.scheme.lower() == "http"
+            and _is_loopback_host(parsed.hostname)
+            and parsed.username is None
+            and parsed.password is None
+            and not parsed.query
+            and not parsed.fragment
+        )
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
+def _validate_base_url(value, *, allow_loopback_http):
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        parsed.port
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("invalid provider base URL") from exc
+    if not parsed.hostname or parsed.username is not None or parsed.password is not None:
+        raise ValueError("provider base URL must have a host and no embedded credentials")
+    if parsed.query or parsed.fragment:
+        raise ValueError("provider base URL must not include a query or fragment")
+    if parsed.scheme.lower() == "https":
+        return
+    if allow_loopback_http and is_loopback_http_url(value):
+        return
+    raise ValueError("provider endpoint must use HTTPS; plain HTTP is allowed only for loopback hosts")
+
+
 class Target(abc.ABC):
     name="base"
     def config(self)->dict: return {"name":self.name,"class":type(self).__name__}
@@ -38,7 +84,7 @@ class _HTTPMixin:
         except (urllib.error.URLError,TimeoutError) as exc: raise RuntimeError(f"provider connection failed: {type(exc).__name__}") from exc
 class OpenAICompatTarget(Target,_HTTPMixin):
     def __init__(self,name,base_url,api_key,model,timeout=60):
-        if not base_url.startswith(("https://","http://localhost","http://127.0.0.1")): raise ValueError("use HTTPS, or an explicit localhost endpoint")
+        _validate_base_url(base_url, allow_loopback_http=True)
         self.name,self.base_url,self.api_key,self.model,self.timeout=name,base_url.rstrip("/"),api_key,model,timeout
     def config(self): return {"name":self.name,"class":type(self).__name__,"base_url":self.base_url,"model":self.model}
     def generate(self,messages,**params):
@@ -49,7 +95,7 @@ class OpenAICompatTarget(Target,_HTTPMixin):
         return Generation(str(content or ""),self.model,{},(time.monotonic()-start)*1000)
 class AnthropicTarget(Target,_HTTPMixin):
     def __init__(self,name,base_url,api_key,model,timeout=60,max_tokens=1024):
-        if not base_url.startswith("https://"): raise ValueError("Anthropic endpoint must use HTTPS")
+        _validate_base_url(base_url, allow_loopback_http=False)
         self.name,self.base_url,self.api_key,self.model,self.timeout,self.max_tokens=name,base_url.rstrip("/"),api_key,model,timeout,max_tokens
     def config(self): return {"name":self.name,"class":type(self).__name__,"base_url":self.base_url,"model":self.model}
     def generate(self,messages,**params):
@@ -61,7 +107,7 @@ class AnthropicTarget(Target,_HTTPMixin):
         return Generation(content,self.model,{},(time.monotonic()-start)*1000)
 class OllamaTarget(Target,_HTTPMixin):
     def __init__(self,name,base_url,model,timeout=120):
-        if not base_url.startswith(("http://localhost","http://127.0.0.1","https://")): raise ValueError("Ollama endpoint must be HTTPS or localhost")
+        _validate_base_url(base_url, allow_loopback_http=True)
         self.name,self.base_url,self.model,self.timeout=name,base_url.rstrip("/"),model,timeout
     def config(self): return {"name":self.name,"class":type(self).__name__,"base_url":self.base_url,"model":self.model}
     def generate(self,messages,**params):
@@ -71,7 +117,7 @@ class OllamaTarget(Target,_HTTPMixin):
         return Generation(content,self.model,{},(time.monotonic()-start)*1000)
 class GeminiTarget(Target,_HTTPMixin):
     def __init__(self,name,api_key,model,base_url="https://generativelanguage.googleapis.com",timeout=60):
-        if not base_url.startswith("https://"): raise ValueError("Gemini endpoint must use HTTPS")
+        _validate_base_url(base_url, allow_loopback_http=False)
         self.name,self.api_key,self.model,self.base_url,self.timeout=name,api_key,model,base_url.rstrip("/"),timeout
     def config(self): return {"name":self.name,"class":type(self).__name__,"base_url":self.base_url,"model":self.model}
     def generate(self,messages,**params):
