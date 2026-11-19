@@ -1,21 +1,6 @@
 name: OMJB tests
 on:
   pull_request:
-    branches: [main, feat/async-provider-evaluation, feat/professional-mutation-engine]
-    paths:
-      - "omjb/**"
-      - "tests/test_omjb.py"
-      - "tests/test_guard_review.py"
-      - "tests/test_downloaders.py"
-      - "tests/test_real_parquet_corpus.py"
-      - "tests/test_async_provider_eval.py"
-      - "tests/test_mutations.py"
-      - "tests/test_mutation_engine.py"
-      - "tests/test_mutation_engine.py"
-      - "corpus/omjb_probes.json"
-      - "pyproject.toml"
-      - ".github/workflows/omjb-tests.yml"
-  push:
     branches: [main, feat/async-provider-evaluation]
     paths:
       - "omjb/**"
@@ -25,6 +10,21 @@ on:
       - "tests/test_real_parquet_corpus.py"
       - "tests/test_async_provider_eval.py"
       - "tests/test_mutations.py"
+      - "tests/test_mutation_engine.py"
+      - "corpus/omjb_probes.json"
+      - "pyproject.toml"
+      - ".github/workflows/omjb-tests.yml"
+  push:
+    branches: [main, feat/professional-mutation-engine]
+    paths:
+      - "omjb/**"
+      - "tests/test_omjb.py"
+      - "tests/test_guard_review.py"
+      - "tests/test_downloaders.py"
+      - "tests/test_real_parquet_corpus.py"
+      - "tests/test_async_provider_eval.py"
+      - "tests/test_mutations.py"
+      - "tests/test_mutation_engine.py"
       - "corpus/omjb_probes.json"
       - "pyproject.toml"
       - ".github/workflows/omjb-tests.yml"
