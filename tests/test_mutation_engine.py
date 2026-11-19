@@ -84,5 +84,29 @@ class MutationEngineTests(unittest.TestCase):
         self.assertEqual(changed.blob_kind,Kind.HEX)
         self.assertEqual((changed.prefix,changed.suffix),("",""))
 
+    def test_region_pipeline_preserves_blob_and_replays(self):
+        import base64
+        import tempfile
+        from pathlib import Path
+        spec=load_spec({"seed":22,"budget":{"max_candidates":1,"max_build_attempts":2},
+            "stages":[
+                {"name":"segment","arms":[{"name":"format.segment_fixture","params":{"header":"Reviewed fixture: "}}]},
+                {"name":"encode_body","arms":["encoding.base64_blob"]},
+                {"name":"normalize_header","arms":["unicode.prefix_nfc"]}]})
+        with tempfile.TemporaryDirectory() as directory:
+            trace=Path(directory)/"region.jsonl"
+            prompt="public library hours"
+            submitted=[]
+            report=Engine(spec,Probe("region","benign",prompt,"comply",meta={"mutation_safe":True}),
+                lambda payload:(submitted.append(payload) or Verdict(True)),approved_benign=True,
+                estimate_cost=lambda _:0.0,trace_path=str(trace)).run()
+            expected="Reviewed fixture: "+base64.b64encode(prompt.encode()).decode()
+            self.assertEqual(report.submitted,1)
+            self.assertEqual(submitted,[expected])
+            rec=next(json.loads(line) for line in trace.read_text().splitlines()
+                     if json.loads(line)["event"]=="candidate")
+            self.assertEqual(rebuild(spec,prompt,rec),expected)
+            self.assertEqual([arm["touches"] for arm in rec["arms"]],["all","blob","prefix"])
+
 if __name__ == "__main__":
     unittest.main()
