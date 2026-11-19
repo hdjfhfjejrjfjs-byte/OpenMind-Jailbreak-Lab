@@ -38,3 +38,14 @@ class Verdict:
 class Candidate:
  idx:int; payload:str; arms:list; dedup:str; skipped:bool=False; reason:str=""
  def arm_keys(self): return [a.key(s) for s,a in self.arms]
+
+def load_extensions(group: str = "openmind_omjb.mutation_transforms") -> list[str]:
+    """Load installed third-party transform modules from Python entry points."""
+    from importlib.metadata import entry_points
+    points = entry_points()
+    selected = points.select(group=group) if hasattr(points, "select") else points.get(group, [])
+    loaded = []
+    for point in sorted(selected, key=lambda item: item.name):
+        point.load()
+        loaded.append(point.name)
+    return loaded
