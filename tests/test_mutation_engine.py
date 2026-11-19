@@ -6,6 +6,7 @@ from omjb.mutation_engine.dedup import dedup_key
 from omjb.mutation_engine.rng import derive_rng
 from omjb.mutation_engine.regions import Region, RegionValue, apply_region, region_compatible
 from omjb.mutation_engine.core import Kind
+from omjb.mutation_engine.scheduler import CostAwareUCB
 from omjb.probes import Probe
 
 class MutationEngineTests(unittest.TestCase):
@@ -82,6 +83,27 @@ class MutationEngineTests(unittest.TestCase):
         self.assertEqual(changed.render(),"HEADBODYTAIL")
         self.assertEqual(changed.blob_kind,Kind.HEX)
         self.assertEqual((changed.prefix,changed.suffix),("",""))
+
+    def test_replay_rejects_spec_mismatch(self):
+        spec=load_spec({"stages":[{"name":"format","arms":["format.quote"]}]})
+        with self.assertRaisesRegex(ValueError,"spec hash mismatch"):
+            rebuild(spec,"hello",{"idx":0,"spec_hash":"wrong","arms":[]})
+
+    def test_scheduler_does_not_select_pruned_arms(self):
+        scheduler=CostAwareUCB(prune_after=1,prune_below=.5)
+        scheduler.add("arm-a",.1)
+        scheduler.add("arm-b",.1)
+        scheduler.update("arm-a",0.0)
+        scheduler.update("arm-b",0.0)
+        self.assertIsNone(scheduler.pick(["arm-a","arm-b"]))
+
+    def test_cost_estimation_error_is_not_counted_as_submission(self):
+        spec=load_spec({"budget":{"max_candidates":1,"max_build_attempts":2},
+            "stages":[{"name":"format","arms":["format.quote"]}]})
+        report=Engine(spec,Probe("p","benign","public library hours","comply",meta={"mutation_safe":True}),
+            lambda _:Verdict(True),approved_benign=True,estimate_cost=lambda _:(_ for _ in ()).throw(RuntimeError("estimate failed"))).run()
+        self.assertEqual(report.submitted,0)
+        self.assertEqual(report.errors,1)
 
     def test_region_pipeline_preserves_blob_and_replays(self):
         import base64
