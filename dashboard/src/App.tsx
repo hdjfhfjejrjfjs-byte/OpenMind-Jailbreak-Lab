@@ -104,8 +104,6 @@ export default function App() {
   const [stopping, setStopping] = useState(false);
 
   const geminiKey = keys.gemini ?? "";
-  const runnerToken = keys.runnerToken ?? "";
-  const runnerCredential = runnerToken || geminiKey;
 
   useEffect(() => {
     let cancelled = false;
@@ -204,7 +202,7 @@ export default function App() {
   }
 
   async function startRun(config: { model: string; scope: Scope; singleId: string; delay: number }) {
-    if (run.running || !cases || !runnerCredential) return;
+    if (run.running || !cases || !geminiKey) return;
     const selected = selectCases(cases, config.scope, config.singleId);
     const controller = new AbortController();
     runAbort.current = controller;
@@ -218,29 +216,9 @@ export default function App() {
     }));
     setNotice(`Running — case 1 of ${selected.length}`);
     const res: RunSuiteResult = await runSuite(cases, {
-      model: config.model, key: runnerCredential, scope: config.scope,
+      model: config.model, key: geminiKey, scope: config.scope,
       singleId: config.singleId, delaySeconds: config.delay,
       signal: controller.signal,
-      ...(runnerToken ? { fetchFn: async (_url: string, init: RequestInit) => {
-        const original = JSON.parse(String(init.body));
-        const messages = (original.contents || []).map((c: { role: string; parts: { text: string }[] }) => ({
-          role: c.role === "model" ? "assistant" : "user",
-          content: c.parts.map(p => p.text).join("\n"),
-        }));
-        const response = await fetch("/api/gemini", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${runnerToken}` },
-          body: JSON.stringify({ model: config.model, messages }),
-          signal: init.signal,
-        });
-        if (!response.ok) return response;
-        const result = await response.json();
-        return new Response(JSON.stringify({
-          candidates: [{ content: { parts: [{ text: result.text }] },
-            finishReason: result.metadata?.finishReason, safetyRatings: result.metadata?.safetyRatings }],
-          promptFeedback: result.metadata?.promptFeedback,
-        }), { status: 200, headers: { "Content-Type": "application/json" } });
-      } } : {}),
       onRecord: (record) => {
         setRun(prev => ({
           ...prev,
@@ -405,7 +383,7 @@ export default function App() {
         <div className="status-strip"><div className="status-left"><span className="live-dot"/><b>{stripLabel}</b><span className="status-sep">/</span><span>{notice}</span></div><div className="status-right"><span>UTC {new Date().toLocaleTimeString("en-GB",{hour12:false,timeZone:"UTC"})}</span><span className="status-sep">·</span><span>BUILD 0.8.0</span></div></div>
 
         {tab === "Overview" && <Overview setTab={setTab} events={events}/>}
-        {tab === "Campaign runner" && <Campaign cases={cases} casesError={casesError} geminiKey={runnerCredential} onGoToConfig={() => setTab("Configuration")} run={run} onStart={startRun} onStop={stopRun} stopping={stopping} onDownload={downloadReport} onDownloadCsv={downloadCsv} onShare={shareResults} model={runModel} setModel={setRunModel} scope={runScope} setScope={setRunScope} singleId={runSingleId} setSingleId={setRunSingleId} delay={runDelay} setDelay={setRunDelay} />}
+        {tab === "Campaign runner" && <Campaign cases={cases} casesError={casesError} geminiKey={geminiKey} onGoToConfig={() => setTab("Configuration")} run={run} onStart={startRun} onStop={stopRun} stopping={stopping} onDownload={downloadReport} onDownloadCsv={downloadCsv} onShare={shareResults} model={runModel} setModel={setRunModel} scope={runScope} setScope={setRunScope} singleId={runSingleId} setSingleId={setRunSingleId} delay={runDelay} setDelay={setRunDelay} />}
         {tab === "Providers" && <Providers selected={selected} toggle={toggleProvider} setTab={setTab}/>}
         {tab === "Evidence" && <Evidence events={events} notify={setNotice}/>}
         {tab === "Configuration" && <Configuration keys={keys} setKey={setKey} clearKey={clearKey} clearAllKeys={clearAllKeys}/>}
@@ -626,13 +604,6 @@ function Configuration(props: {
 }) {
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   return <>
-    <div className="panel" style={{padding:"20px",marginBottom:"20px"}}>
-      <h3>Protected Vercel Gemini runner</h3>
-      <p className="muted">Enter the operator access token for the server-side Gemini key. It stays in page memory. Leave blank to use your own Gemini key below.</p>
-      <label htmlFor="runner-token">Operator access token</label>
-      <input id="runner-token" aria-label="Operator access token" type="password" autoComplete="off" value={props.keys.runnerToken ?? ""} onChange={e=>props.setKey("runnerToken",e.target.value)} placeholder="LAB_RUNNER_TOKEN" />
-      <button className="subtle-btn" onClick={()=>props.clearKey("runnerToken")}>CLEAR OPERATOR TOKEN</button>
-    </div>
     <div className="section-heading"><div><div className="eyebrow">05 / API KEYS</div><h2>Configuration</h2></div><span className="tag tag-cyan">PAGE MEMORY ONLY</span></div>
     <div className="notice"><KeyRound size={17}/><p><b>Keys live in this page's memory only.</b> They are held in React state, never written to the repo, localStorage, or any file, and never appear in code, logs, or URLs. Each key is sent only to that provider's own API. Closing or reloading the page forgets them.</p></div>
     <div className="panel key-panel">
