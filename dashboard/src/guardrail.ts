@@ -476,6 +476,13 @@ export async function runSuite(
         fetchFn: opts.fetchFn,
       });
     }
+    // A user-cancelled in-flight request is not a completed test case.
+    // Preserve earlier completed cases without counting the abort as an error.
+    if (opts.signal?.aborted && record.error?.message === "stopped by user") {
+      stopped = true;
+      stoppedByUser = true;
+      break;
+    }
     results.push(record);
     opts.onRecord?.(record, i, selected.length);
     if (c.case_id === "GL-009" && record.response !== null && record.response !== undefined) {
