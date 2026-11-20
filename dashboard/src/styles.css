@@ -72,3 +72,18 @@
 .doc-list b{color:#d9e8f6;font-weight:600}
 .mono{font-family:var(--mono);font-size:10px;color:#c5cee0}
 .inline-action{display:inline-flex;vertical-align:middle;padding:0 2px}
+
+.response-times { margin: 16px 0; padding: 14px; background: #0b101b; border: 1px solid var(--line); border-radius: 5px; }
+.response-times figcaption, .chart-range { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
+.response-times strong { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+.response-times figcaption span, .chart-range { font: 10px var(--mono); color: #a3aec4; }
+.response-bars { display: grid; grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: end; gap: 2px; height: clamp(68px, 10vw, 112px); margin: 12px 0 6px; border-bottom: 1px solid #43526b; background: repeating-linear-gradient(to top, transparent 0 calc(25% - 1px), #253044 25%); }
+.response-bars i { min-height: 2px; background: linear-gradient(to top, #306b88, var(--cyan)); transform-origin: bottom; }
+
+.chart-pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); }
+@media (prefers-reduced-motion: no-preference) {
+  .response-bars i { animation: response-rise .32s ease-out; transition: height .32s; }
+  .chart-pulse { animation: response-pulse 2s ease-out infinite; }
+}
+@keyframes response-rise { from { transform: scaleY(0); } }
+@keyframes response-pulse { 0% { box-shadow: 0 0 0 0 #55f3f299; } 75%, 100% { box-shadow: 0 0 0 6px transparent; } }
