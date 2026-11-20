@@ -43,7 +43,7 @@ interface RunState {
   report: Record<string, unknown> | null;
   done: number;
   total: number;
-  stoppedByUser: boolean;
+  stopped: boolean;
 }
 
 function nowTime(): string {
@@ -98,7 +98,7 @@ export default function App() {
   // in the runner view and the status strip shows live progress.
   const [run, setRun] = useState<RunState>({
     running: false, results: [], log: [{ time: nowTime(), text: "Log ready — run a campaign to see progress here.", kind: "info" }],
-    status: "", report: null, done: 0, total: 0, stoppedByUser: false,
+    status: "", report: null, done: 0, total: 0, stopped: false,
   });
   const runAbort = useRef<AbortController | null>(null);
   const [stopping, setStopping] = useState(false);
@@ -130,7 +130,7 @@ export default function App() {
     ? "RUNNING"
     : casesError ? "CASES FAILED" : cases ? "RUNNER READY" : "LOADING CASES…";
   const stripLabel = run.running
-    ? `RUNNING · CASE ${run.done} OF ${run.total}`
+    ? `RUNNING · ${run.done} OF ${run.total} RECORDED`
     : casesError ? "CASES FAILED" : cases ? "RUNNER READY" : "LOADING CASES…";
 
   // Notifications are real state only — never invented. An alert is a
@@ -210,7 +210,7 @@ export default function App() {
     const stamp = nowTime();
     setRun(prev => ({
       ...prev, running: true, results: [], report: null, done: 0,
-      total: selected.length, stoppedByUser: false,
+      total: selected.length, stopped: false,
       status: `Running ${selected[0]?.case_id ?? ""} (1 of ${selected.length})…`,
       log: [...prev.log.slice(-999), { time: stamp, text: `Run started — ${selected.length} cases · model ${config.model} · delay ${config.delay}s`, kind: "info" as const }],
     }));
@@ -242,22 +242,23 @@ export default function App() {
       summary, results: res.results,
     };
     const endStamp = nowTime();
+    const stopped = res.stoppedByUser || Boolean(res.stopMessage);
     const endText = res.stoppedByUser
-      ? `Stopped by you — ${res.results.length} case(s) answered; results kept.`
+      ? `Stopped by you — ${buckets.answered} case(s) answered; results kept.`
       : res.stopMessage
-        ? `Stopped: ${res.stopMessage} — ${res.results.length} case(s) answered.`
-        : `Done — ${res.results.length} case(s) answered.`;
-    const outcome = `${res.results.length} answered · ${buckets.held} held · ${buckets.mentions} mentions · ${buckets.manualReview} manual review · ${buckets.controls} controls · ${buckets.failures} failures · ${buckets.errors} errors`;
+        ? `Stopped: ${res.stopMessage} — ${buckets.answered} case(s) answered.`
+        : `Done — ${buckets.answered} case(s) answered.`;
+    const outcome = `${buckets.answered} answered · ${buckets.held} held · ${buckets.mentions} mentions · ${buckets.manualReview} manual review · ${buckets.controls} controls · ${buckets.failures} failures · ${buckets.errors} errors`;
     setRun(prev => ({
-      ...prev, running: false, report, stoppedByUser: res.stoppedByUser, status: endText,
-      log: [...prev.log.slice(-999), { time: endStamp, text: endText, kind: res.stoppedByUser ? "warn" : buckets.failures > 0 ? "fail" : "ok" }],
+      ...prev, running: false, report, stopped, status: endText,
+      log: [...prev.log.slice(-999), { time: endStamp, text: endText, kind: stopped ? "warn" : buckets.failures > 0 ? "fail" : "ok" }],
     }));
-    setNotice(`${res.stoppedByUser ? "Stopped" : "Done"} · ${outcome}`);
+    setNotice(`${stopped ? "Stopped" : "Done"} · ${outcome}`);
     setEvents(old => [{
       time: endStamp,
-      title: res.stoppedByUser ? "Live campaign stopped" : buckets.failures > 0 ? "Live campaign done — failures need review" : "Live campaign done",
+      title: stopped ? "Live campaign stopped" : buckets.failures > 0 ? "Live campaign done — failures need review" : "Live campaign done",
       detail: `${config.model} · ${outcome}`,
-      type: res.stoppedByUser ? "warn" : buckets.failures > 0 ? "bad" : "ok",
+      type: stopped ? "warn" : buckets.failures > 0 ? "bad" : "ok",
       live: true,
     }, ...old]);
     runAbort.current = null;
@@ -542,8 +543,8 @@ function Campaign(props: {
       <div className="safe-note"><LockKeyhole size={14}/><span>Runs in this browser against Gemini. Your key is kept in page memory only and sent only to Google's API — never stored, logged, or sent anywhere else.</span></div>
 
       <div className="run-progress" ref={progressRef}>
-        <div className="progress-label"><span>{run.running ? `RUNNING · CASE ${run.done} OF ${run.total}` : run.report ? "RUN COMPLETE" : "RUN PROGRESS"}</span><b>{run.total > 0 ? `${pct}%` : "—"}</b></div>
-        <div className="progress-track"><i style={{ width: `${pct}%` }}/></div>
+        <div className="progress-label"><span>{run.running ? `RUNNING · ${run.done} OF ${run.total} RECORDED` : run.stopped ? "RUN STOPPED" : run.report ? "RUN COMPLETE" : "RUN PROGRESS"}</span><b>{run.total > 0 ? `${pct}%` : "—"}</b></div>
+        <div className="progress-track" role="progressbar" aria-label="Campaign progress" aria-valuemin={0} aria-valuemax={run.total || 1} aria-valuenow={run.done} aria-valuetext={`${run.done} of ${run.total} cases recorded`}><i style={{ width: `${pct}%` }}/></div>
         <div className="run-status">{run.status || "No run yet — progress appears here as each case completes."}</div>
         <div className="count-chips">
           <span className="count-chip"><b>{buckets.answered}</b> ANSWERED</span>
@@ -638,7 +639,7 @@ function Documentation(props: { setTab: (t: Tab) => void }) {
       </ol>
     </div>
     <div className="panel doc-panel"><span className="panel-kicker">READING THE PROGRESS WINDOW</span><h3>What you see while a run is live</h3>
-      <p className="muted">The progress window sits in the campaign runner, under the run controls, and updates in real time — never a blank wait. The count reads <span className="mono">CASE 12 OF 76</span>, the bar fills as cases complete, and the summary chips count answered, held, mentions, manual review, controls, failures, and errors as they happen. Each log line shows one case: its id, its verdict, and its latency in seconds. The results table below the log lists every completed case with its assessment and a response excerpt. Switching tabs mid-run does not stop the run; the status strip keeps showing live progress.</p>
+      <p className="muted">The progress window sits in the campaign runner, under the run controls, and updates in real time — never a blank wait. The count reads <span className="mono">12 OF 76 RECORDED</span>, the bar fills as cases complete, and the summary chips count answered, held, mentions, manual review, controls, failures, and errors as they happen. Each log line shows one case: its id, its verdict, and its latency in seconds. The results table below the log lists every completed case with its assessment and a response excerpt. Switching tabs mid-run does not stop the run; the status strip keeps showing live progress.</p>
     </div>
     <div className="panel doc-panel"><span className="panel-kicker">ASSESSMENT RULES</span><h3>What each verdict means</h3>
       <ul className="doc-list">
