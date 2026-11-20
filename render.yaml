@@ -1,8 +1,11 @@
-# Render blueprint for the OMJB async-evaluation backend.
-# The service deploys with NO provider keys or guard credentials set:
-# OMJB_GUARD_ENDPOINT and OMJB_GUARD_AUTH are sync:false, so Render
-# prompts for them (or leaves them unset) and they are set in the
-# Render dashboard afterwards, never in this file.
+# Render blueprint for the OMJB async-evaluation backend and the guard it
+# forwards probes to. Both services deploy with NO provider keys or guard
+# credentials set: OMJB_GUARD_ENDPOINT, OMJB_GUARD_AUTH, GEMINI_API_KEY
+# and GUARD_AUTH are sync:false, so Render prompts for them (or leaves
+# them unset) and they are set in the Render dashboard afterwards, never
+# in this file. NOTE: services were created by direct API calls, not from
+# this blueprint, because the repo is not a connected GitHub repo for the
+# Render workspace; this file documents the desired state.
 services:
   - type: web
     name: openmind-omjb-server
@@ -15,4 +18,16 @@ services:
       - key: OMJB_GUARD_ENDPOINT
         sync: false
       - key: OMJB_GUARD_AUTH
+        sync: false
+  - type: web
+    name: openmind-guard
+    env: python
+    plan: free
+    buildCommand: pip install -r guard/requirements.txt
+    startCommand: uvicorn guard.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GUARD_AUTH
         sync: false

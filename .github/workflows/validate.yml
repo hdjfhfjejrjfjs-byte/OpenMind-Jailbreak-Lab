@@ -18,9 +18,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install OMJB optional API dependencies
-        run: python -m pip install -e '.[api,server]'
+        run: python -m pip install -e '.[api,server,guard]'
       - name: Compile every Python source and test file
-        run: python -m compileall -q modules src tests omjb server
+        run: python -m compileall -q modules src tests omjb server guard
       - name: Validate benchmark
         run: |
           python -m src.validate data/benchmark_v0.3.jsonl
