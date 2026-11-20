@@ -1,21 +1,20 @@
 # OPENMIND // Neon Security Dashboard
 
-A responsive cyberpunk-style frontend for the OpenMind-Jailbreak-Lab project. Built with React + Vite and designed for Vercel or Render static hosting.
+A responsive cyberpunk-style frontend for the OpenMind-Jailbreak-Lab project. Built with React + Vite and deployed as a static site on Vercel.
 
 ## What is included
 
 - Neon-dark responsive dashboard with animated scanline/grid effects.
-- Overview, campaign runner, provider matrix, and evidence views.
-- Provider selection and bounded campaign settings.
-- Demo mode clearly labels synthetic data.
-- Optional API connection through `VITE_API_BASE_URL`.
-- No provider API keys are stored in the browser.
+- Overview, campaign runner, provider matrix, evidence, configuration, and documentation views.
+- **In-browser campaign runner:** the Guardrail Lab suite (76 cases) runs directly in your browser against Gemini, case by case, with a live progress window — a progress count and bar, per-case log lines as each case completes, running summary counts, and a results table. No backend is needed.
+- Live assessment uses the lab's own rule (canary-only vs mention vs control vs held), the lab system instruction, the GL-010 guard, and the Space's retry policy — implemented in `src/guardrail.ts` and checked against the repo's Python rule.
+- Provider keys live in **Configuration**, in page memory only. Gemini is the live runner; the other providers are listed for reference and are not wired yet.
+- Demo mode clearly labels synthetic data. Without a Gemini key the runner points you to Configuration instead of pretending to run.
 
 ## Run locally
 
 ```bash
 npm install
-cp .env.example .env
 npm run dev
 ```
 
@@ -28,6 +27,24 @@ npm run build
 npm run preview
 ```
 
+## Test
+
+```bash
+npm test
+```
+
+This runs the guardrail checks (`scripts/test-guardrail.cjs`: the TypeScript assessment rule against the repo's Python `assess()` on fixtures, the GL-010 guard, the retry policy, and the stop-during-retry/flight/delay behaviour) and verifies `public/cases.json` against a fresh export of the repo's Guardrail Lab cases (`scripts/verify-cases.py`).
+
+## Cases
+
+`public/cases.json` is generated from the repository's Guardrail Lab cases (`modules/guardrail_lab/cases.py` + `source_cases.py`) — 76 rows, 24 core + 52 source-derived safe adaptations. Regenerate it with:
+
+```bash
+python3 scripts/generate_cases.py --repo /path/to/OpenMind-Jailbreak-Lab
+```
+
+Verify it with `python3 scripts/verify-cases.py --repo /path/to/OpenMind-Jailbreak-Lab`. The file is served at `/cases.json` and fetched by the page at runtime.
+
 ## Deploy to Vercel
 
 1. Push this folder to a GitHub repository.
@@ -35,45 +52,21 @@ npm run preview
 3. Framework preset: **Vite**.
 4. Build command: `npm run build`.
 5. Output directory: `dist`.
-6. If connecting an API, set `VITE_API_BASE_URL` in Project Settings → Environment Variables.
-7. Deploy.
-
-`vercel.json` includes an SPA rewrite as a safety net. The dashboard has no client-side routes (navigation is tab state), so the rewrite is normally a no-op.
-
-## Deploy to Render
-
-1. Push this folder to GitHub.
-2. In Render, create **New → Static Site** and select the repository.
-3. Build command: `npm install && npm run build`.
-4. Publish directory: `dist`.
-5. Add `VITE_API_BASE_URL` if your backend is deployed separately.
 6. Deploy.
 
-`render.yaml` is included as a Blueprint option. Blueprints only read `render.yaml` at the repository root: if you deploy from the monorepo (where this file lives at `dashboard/render.yaml`), either copy it to the repo root or create the static site manually as above. `render.yaml` already sets `VITE_API_BASE_URL` to the live backend; change it if your backend lives elsewhere. Without that variable a fresh deploy silently runs in local demo mode.
+`vercel.json` includes an SPA rewrite as a safety net. The dashboard has no client-side routes (navigation is tab state), so the rewrite is normally a no-op. Static files in `dist/` (including `cases.json`) take precedence over the rewrite.
 
-## Connect the Python evaluation engine
+## How the live runner works
 
-This package is a frontend. It does not bundle or reimplement the Python lab. Deploy the Python service separately (for example, as a Render web service), then set `VITE_API_BASE_URL` to that service's base URL.
+1. Add a free Gemini API key in **Configuration** (Google AI Studio, free tier). The key is held in React state — page memory only — and sent only to Google's API. Closing or reloading the page forgets it.
+2. Open the **Campaign runner**, pick a scope (All 76, Core 24, Source 52, or a single case) and a delay between calls (default 5s, free-tier friendly).
+3. Press **Run campaign**. Cases run sequentially; the progress window shows a live count (`CASE 12 OF 76`), a progress bar, one log line per completed case (id, verdict, latency), running summary counts, and a results table. Switching tabs mid-run does not stop the run; the status strip keeps showing live progress.
+4. **Stop** aborts the in-flight call and any delay or retry wait immediately. Completed cases are kept; the remaining cases are never sent.
+5. Download the JSON report when the run finishes.
 
-The UI expects this optional endpoint:
-
-- `POST /api/campaigns`
-- JSON request body:
-  ```json
-  {
-    "providers": ["gemini"],
-    "suite": "guardrail-lab",
-    "max_requests": 20,
-    "workers": 2,
-    "timeout_seconds": 45
-  }
-  ```
-
-The API should return JSON, ideally including a campaign/run identifier and status. The live backend returns `id`, `status: "completed"`, plus the run report (`total`, `allowed`, `blocked`, `review`, `errors`, `scored`, `allow_rate`); the UI surfaces the error count, so a completed run with errored probes is shown as completed-with-errors, not as a success. The exact adapter is not assumed here: wire this route to your existing Python CLI or service after confirming its actual interface. Until an API base URL is configured, the Run Campaign button operates in clearly marked local demo mode and does not contact a model. On load the UI probes `GET /health` when an API base URL is set, so the connection pill reports whether the backend actually answered instead of only whether the variable is set.
+Retries mirror the Space: 429/5xx retried up to 3 attempts with Retry-After (cap 60s); a 429 after retries or a 401/403/404 stops the suite; other failures record `partial_run` and the run continues. Each call times out after 60s. GL-010 runs only if GL-009 completed in the same run; otherwise it is recorded as not sent.
 
 ## Security notes
 
-- Never put provider API keys in `VITE_*` variables; Vite exposes those values to the browser.
-- Keep credentials in backend environment variables / hosting secrets.
-- Add authentication, authorization, rate limits, request validation, and spend limits before exposing campaign execution publicly.
-- Use reviewed benign test cases and retain human review of candidate findings.
+- Never put provider API keys in `VITE_*` variables; Vite exposes those values to the browser. Keys go in Configuration (page memory only), never in code, files, logs, or URLs.
+- Use reviewed benign test cases and retain human review of candidate findings. A `potential_guardrail_failure` is a candidate signal, never a confirmed bypass on its own.
