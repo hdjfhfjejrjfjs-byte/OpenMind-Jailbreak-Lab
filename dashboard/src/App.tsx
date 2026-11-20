@@ -436,6 +436,21 @@ function Module({icon:Icon,n,title,desc,status,onSelect}:{icon:typeof Activity;n
   return <div className="module-card" role="button" tabIndex={0} onClick={onSelect} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}><div className="module-top"><div className="module-icon"><Icon size={19}/></div><span>{n}</span></div><h3>{title}</h3><p>{desc}</p><div className="module-status"><i/>{status}<ArrowUpRight size={13}/></div></div>;
 }
 
+function ResponseTimes({ results, running }: { results: RunRecord[]; running: boolean }) {
+  const samples = results.filter(r => r.response !== null && Number.isFinite(r.duration_seconds)).slice(-24);
+  if (!samples.length) return null;
+  const peak = Math.max(1, ...samples.map(r => r.duration_seconds));
+  const latest = samples[samples.length - 1];
+  return <figure className="response-times">
+    <figcaption><strong>{running && <i className="chart-pulse" aria-hidden="true"/>}Response time</strong>
+      <span>Latest {latest.duration_seconds.toFixed(2)} s · Scale 0–{peak.toFixed(2)} s</span></figcaption>
+    <div className="response-bars" role="img" aria-label={`Duration of the last ${samples.length} responses in order. Latest: ${latest.case_id}, ${latest.duration_seconds.toFixed(2)} seconds.`}>
+      {samples.map(r => <i key={r.case_id} style={{height: `${100 * r.duration_seconds / peak}%`}} title={`${r.case_id}: ${r.duration_seconds.toFixed(2)} s`}/>)}
+    </div>
+    <div className="chart-range"><span>{samples[0].case_id}</span>{samples.length > 1 && <span>{latest.case_id}</span>}</div>
+  </figure>;
+}
+
 function Campaign(props: {
   cases: LabCase[] | null; casesError: string | null; geminiKey: string;
   onGoToConfig: () => void; run: RunState;
@@ -555,6 +570,7 @@ function Campaign(props: {
           <span className="count-chip count-fail"><b>{buckets.failures}</b> FAILURES</span>
           <span className="count-chip count-err"><b>{buckets.errors}</b> ERRORS</span>
         </div>
+        <ResponseTimes results={run.results} running={run.running}/>
         <div className="log-window" ref={logRef} aria-label="Run progress log">
           {run.log.map((l, i) => <div key={i} className={`log-line log-${l.kind}`}><span className="log-time">{l.time}</span><span>{l.text}</span></div>)}
         </div>
