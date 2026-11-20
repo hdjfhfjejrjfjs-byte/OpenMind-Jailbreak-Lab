@@ -515,7 +515,23 @@ function Campaign(props: {
   }, [run.running]);
 
   const canRun = Boolean(props.cases && props.geminiKey && !run.running && model.trim() !== "");
-  return <div className="campaign-layout">
+  return <div className="campaign-layout mobile-review-layout">
+    <style>{`
+      .mobile-review-layout, .mobile-review-layout .campaign-main { min-width: 0; }
+      .mobile-review-layout .results-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .mobile-review-layout .review-panel { min-width: 0; max-width: 100%; box-sizing: border-box; overflow: hidden; }
+      .mobile-review-layout .review-case { min-width: 0; max-width: 100%; overflow: hidden; }
+      .mobile-review-layout .review-response { box-sizing: border-box; width: 100%; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; font-size: 13px; line-height: 1.55; max-height: 260px; overflow: auto; padding: 12px; background: rgba(0,0,0,.18); border-radius: 8px; }
+      .mobile-review-layout .review-select { display: block; box-sizing: border-box; width: 100%; max-width: 100%; min-height: 44px; margin-top: 8px; font-size: 16px; padding: 8px; }
+      .mobile-review-layout .review-case-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .mobile-review-layout .review-case-header .tag { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+      @media (max-width: 768px) {
+        .mobile-review-layout { display: block; width: 100%; max-width: 100%; }
+        .mobile-review-layout .campaign-main, .mobile-review-layout .campaign-side { width: 100%; max-width: 100%; min-width: 0; }
+        .mobile-review-layout .review-panel { padding: 12px !important; }
+        .mobile-review-layout .review-response { font-size: 13px; }
+      }
+    `}</style>
     <div className="panel campaign-main"><div className="panel-head"><div><span className="panel-kicker">CAMPAIGN CONFIGURATION</span><h3>Build an evaluation run</h3></div><span className="tag tag-cyan">BOUNDED</span></div>
       {props.casesError && <div className="notice"><Shield size={17}/><p><b>Cases failed to load.</b> {props.casesError} — the runner cannot start until cases.json loads.</p></div>}
       {!props.casesError && !props.geminiKey && <div className="notice"><KeyRound size={17}/><p><b>No Gemini key configured.</b> The runner reads its key from Configuration — add it there and come back.</p><button className="text-action" onClick={props.onGoToConfig}>OPEN CONFIGURATION <ArrowUpRight size={14}/></button></div>}
@@ -566,13 +582,13 @@ function Campaign(props: {
             <td>{r.response ? r.response.slice(0, 200) : (r.error ? `error: ${r.error.message}`.slice(0, 200) : "")}</td>
           </tr>)}</tbody>
         </table></div>}
-        {unresolved.length > 0 && <div className="panel" style={{marginTop:16,padding:16}}>
+        {unresolved.length > 0 && <div className="panel review-panel" style={{marginTop:16,padding:16}}>
           <div className="panel-head"><div><span className="panel-kicker">HUMAN ADJUDICATION</span><h3>Review ambiguous results ({reviewedCount}/{unresolved.length})</h3></div></div>
           <p className="muted">A marker quoted during analysis is not automatically a bypass. Read each response and select a decision. Original automated assessments remain unchanged.</p>
-          {unresolved.map(r => <div key={r.case_id} style={{padding:"12px 0",borderBottom:"1px solid var(--border, #333)"}}>
-            <b>{r.case_id}</b> <span className="tag tag-muted">{r.assessment}</span>
-            <pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere",fontSize:12,maxHeight:180,overflowY:"auto",marginTop:8}}>{r.response || r.error?.message || "No response"}</pre>
-            <label style={{display:"block",marginTop:8}}>Reviewer decision: <select aria-label={`Review ${r.case_id}`} value={adjudications[r.case_id] || ""} onChange={e=>setAdjudications(prev=>({...prev,[r.case_id]:e.target.value as "boundary_held"|"confirmed_failure"|"needs_review"}))}>
+          {unresolved.map(r => <div className="review-case" key={r.case_id} style={{padding:"12px 0",borderBottom:"1px solid var(--border, #333)"}}>
+            <div className="review-case-header"><b>{r.case_id}</b><span className="tag tag-muted">{r.assessment.replaceAll("_", " ")}</span></div>
+            <pre className="review-response">{r.response || r.error?.message || "No response"}</pre>
+            <label style={{display:"block",marginTop:8}}>Reviewer decision: <select className="review-select" aria-label={`Review ${r.case_id}`} value={adjudications[r.case_id] || ""} onChange={e=>setAdjudications(prev=>({...prev,[r.case_id]:e.target.value as "boundary_held"|"confirmed_failure"|"needs_review"}))}>
               <option value="">Not reviewed</option><option value="boundary_held">Boundary held (reviewed)</option><option value="confirmed_failure">Confirmed failure</option><option value="needs_review">Needs further review</option>
             </select></label>
           </div>)}
