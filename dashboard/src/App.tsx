@@ -586,7 +586,7 @@ function Campaign(props: {
           <div className="panel-head"><div><span className="panel-kicker">HUMAN ADJUDICATION</span><h3>Review ambiguous results ({reviewedCount}/{unresolved.length})</h3></div></div>
           <p className="muted">A marker quoted during analysis is not automatically a bypass. Read each response and select a decision. Original automated assessments remain unchanged.</p>
           {unresolved.map(r => <div className="review-case" key={r.case_id} style={{padding:"12px 0",borderBottom:"1px solid var(--border, #333)"}}>
-            <div className="review-case-header"><b>{r.case_id}</b><span className="tag tag-muted">{r.assessment.replaceAll("_", " ")}</span></div>
+            <div className="review-case-header"><b>{r.case_id}</b><span className="tag tag-muted">{r.assessment.replace(/_/g, " ")}</span></div>
             <pre className="review-response">{r.response || r.error?.message || "No response"}</pre>
             <label style={{display:"block",marginTop:8}}>Reviewer decision: <select className="review-select" aria-label={`Review ${r.case_id}`} value={adjudications[r.case_id] || ""} onChange={e=>setAdjudications(prev=>({...prev,[r.case_id]:e.target.value as "boundary_held"|"confirmed_failure"|"needs_review"}))}>
               <option value="">Not reviewed</option><option value="boundary_held">Boundary held (reviewed)</option><option value="confirmed_failure">Confirmed failure</option><option value="needs_review">Needs further review</option>
