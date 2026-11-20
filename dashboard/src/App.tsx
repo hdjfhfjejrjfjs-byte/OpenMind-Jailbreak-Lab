@@ -20,7 +20,7 @@ const providers = [
   { id: "deepseek", name: "DeepSeek", model: "DeepSeek models", color: "blue", key: "DEEPSEEK_API_KEY" },
   { id: "groq", name: "Groq", model: "Groq-hosted models", color: "orange", key: "GROQ_API_KEY" },
   { id: "together", name: "Together", model: "Hosted open models", color: "pink", key: "TOGETHER_API_KEY" },
-  { id: "custom", name: "Custom endpoint", model: "Operator configured", color: "muted", key: "Server-side config" }
+  { id: "custom", name: "Custom endpoint", model: "Operator configured", color: "muted", key: "Not applicable" }
 ];
 
 // Seed rows are demo data, not real activity: each detail says so, and the
@@ -79,6 +79,15 @@ export default function App() {
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [cases, setCases] = useState<LabCase[] | null>(null);
   const [casesError, setCasesError] = useState<string | null>(null);
+  // Run configuration lives here (not in the Campaign view) for the same
+  // reason as run state: the Campaign view unmounts when its tab is not
+  // active, and config kept in its local state reset to defaults on every
+  // tab switch — so the side panel showed the wrong scope, case count and
+  // delay for the run in flight. Lifted here, it survives tab switches.
+  const [runModel, setRunModel] = useState(DEFAULT_MODEL);
+  const [runScope, setRunScope] = useState<Scope>("all");
+  const [runSingleId, setRunSingleId] = useState("GL-001");
+  const [runDelay, setRunDelay] = useState(5);
   // Run state lives here (not in the Campaign view) so switching tabs
   // mid-run does not kill the run — the progress window keeps updating
   // in the runner view and the status strip shows live progress.
@@ -116,8 +125,6 @@ export default function App() {
   const stripLabel = run.running
     ? `RUNNING · CASE ${run.done} OF ${run.total}`
     : casesError ? "CASES FAILED" : cases ? "RUNNER READY" : "LOADING CASES…";
-
-  const chosenNames = useMemo(() => selected.map(id => providers.find(p => p.id === id)?.name).filter(Boolean).join(", "), [selected]);
 
   function toggleProvider(id: string) {
     setSelected(old => old.includes(id) ? old.filter(x => x !== id) : [...old, id]);
@@ -234,7 +241,7 @@ export default function App() {
       <div className="workspace-label">WORKSPACE <span>01</span></div>
       <nav className="nav-list">
         {navItems.map(({label, icon: Icon}) => <button key={label} className={`nav-item ${tab === label ? "active" : ""}`} onClick={() => {setTab(label); setMobileOpen(false);}}>
-          <Icon size={17}/><span>{label}</span>{label === "Evidence" && <span className="nav-count">03</span>}
+          <Icon size={17}/><span>{label}</span>{label === "Evidence" && <span className="nav-count">{String(events.length).padStart(2, "0")}</span>}
         </button>)}
       </nav>
       <div className="sidebar-bottom">
@@ -267,7 +274,7 @@ export default function App() {
         <div className="status-strip"><div className="status-left"><span className="live-dot"/><b>{stripLabel}</b><span className="status-sep">/</span><span>{notice}</span></div><div className="status-right"><span>UTC {new Date().toLocaleTimeString("en-GB",{hour12:false,timeZone:"UTC"})}</span><span className="status-sep">·</span><span>BUILD 0.8.0</span></div></div>
 
         {tab === "Overview" && <Overview setTab={setTab} events={events}/>}
-        {tab === "Campaign runner" && <Campaign cases={cases} casesError={casesError} geminiKey={geminiKey} onGoToConfig={() => setTab("Configuration")} run={run} onStart={startRun} onStop={stopRun} onDownload={downloadReport} />}
+        {tab === "Campaign runner" && <Campaign cases={cases} casesError={casesError} geminiKey={geminiKey} onGoToConfig={() => setTab("Configuration")} run={run} onStart={startRun} onStop={stopRun} onDownload={downloadReport} model={runModel} setModel={setRunModel} scope={runScope} setScope={setRunScope} singleId={runSingleId} setSingleId={setRunSingleId} delay={runDelay} setDelay={setRunDelay} />}
         {tab === "Providers" && <Providers selected={selected} toggle={toggleProvider} setTab={setTab}/>}
         {tab === "Evidence" && <Evidence events={events} notify={setNotice}/>}
         {tab === "Configuration" && <Configuration keys={keys} setKey={setKey} clearKey={clearKey} clearAllKeys={clearAllKeys}/>}
@@ -322,14 +329,18 @@ function Campaign(props: {
   onGoToConfig: () => void; run: RunState;
   onStart: (config: { model: string; scope: Scope; singleId: string; delay: number }) => void;
   onStop: () => void; onDownload: () => void;
+  model: string; setModel: (m: string) => void;
+  scope: Scope; setScope: (s: Scope) => void;
+  singleId: string; setSingleId: (id: string) => void;
+  delay: number; setDelay: (d: number) => void;
 }) {
-  const [model, setModel] = useState(DEFAULT_MODEL);
-  const [scope, setScope] = useState<Scope>("all");
-  const [singleId, setSingleId] = useState("GL-001");
-  const [delay, setDelay] = useState(5);
   const logRef = useRef<HTMLDivElement | null>(null);
   const progressRef = useRef<HTMLDivElement | null>(null);
   const { run } = props;
+  // Config (model/scope/single case/delay) is lifted into App state and
+  // passed down, so it survives tab switches — the Campaign view unmounts
+  // when its tab is not active, and local state here used to reset.
+  const { model, setModel, scope, setScope, singleId, setSingleId, delay, setDelay } = props;
   const buckets = useMemo(() => summaryBuckets(run.results), [run.results]);
   const selectedCount = props.cases ? selectCases(props.cases, scope, singleId).length : 0;
   const pct = run.total > 0 ? Math.round((run.done / run.total) * 100) : 0;
@@ -345,13 +356,14 @@ function Campaign(props: {
     if (run.running) progressRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [run.running]);
 
-  const canRun = Boolean(props.cases && props.geminiKey && !run.running);
+  const canRun = Boolean(props.cases && props.geminiKey && !run.running && model.trim() !== "");
   return <div className="campaign-layout">
     <div className="panel campaign-main"><div className="panel-head"><div><span className="panel-kicker">CAMPAIGN CONFIGURATION</span><h3>Build an evaluation run</h3></div><span className="tag tag-cyan">BOUNDED</span></div>
       {props.casesError && <div className="notice"><Shield size={17}/><p><b>Cases failed to load.</b> {props.casesError} — the runner cannot start until cases.json loads.</p></div>}
       {!props.casesError && !props.geminiKey && <div className="notice"><KeyRound size={17}/><p><b>No Gemini key configured.</b> The runner reads its key from Configuration — add it there and come back.</p><button className="text-action" onClick={props.onGoToConfig}>OPEN CONFIGURATION <ArrowUpRight size={14}/></button></div>}
       <label className="field-label" htmlFor="run-model">MODEL</label>
       <input id="run-model" className="text-field" type="text" value={model} onChange={e => setModel(e.target.value)} placeholder="gemini-3.5-flash-lite" />
+      {!model.trim() && <p className="key-hint">Enter a model name to run — a blank model stops after the first case with a 404.</p>}
       <label className="field-label" htmlFor="run-scope">SCOPE</label>
       <select id="run-scope" className="select-field" value={scope} onChange={e => setScope(e.target.value as Scope)}>
         <option value="all">All 76 cases</option>

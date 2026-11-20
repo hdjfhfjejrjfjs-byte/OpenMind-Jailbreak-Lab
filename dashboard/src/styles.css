@@ -22,6 +22,7 @@
 .log-line{display:flex;gap:10px;padding:5px 11px;border-bottom:1px solid #ffffff08;border-left:2px solid transparent;color:#aeb8ca;white-space:pre-wrap;word-break:break-word}
 .log-time{color:#69758b;flex:none}
 .log-ok{border-left-color:var(--green)}
+.log-info{border-left-color:var(--cyan)}
 .log-warn{border-left-color:#e8b75b}
 .log-fail{border-left-color:var(--pink)}
 .log-bad{border-left-color:#ff6586}
