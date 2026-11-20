@@ -13,8 +13,15 @@
  *    "gemini-3.5-flash-lite", which read as an entered value on an
  *    empty field) and the delay stepper accepts typed input, clamped
  *    to 0–30 (was: static text, buttons only)
+ *  - the notifications bell opens a real panel (was: it only set a
+ *    status-strip string, so the tap felt dead): empty state says
+ *    "No new system alerts.", real alerts come from live run outcomes
+ *    and cases-load failures only, and the panel dismisses via its
+ *    close button, Escape, or a tap outside. The bell stays visible
+ *    on phones (was: hidden under 560px, so the panel was unreachable
+ *    there) with a touch-sized target.
  *  - mobile layout rules (360–430px): the topbar hides its decorative
- *    bell + avatar and the breadcrumb truncates instead of wrapping,
+ *    avatar and the breadcrumb truncates instead of wrapping,
  *    the status strip and notice boxes wrap, the results table has a
  *    min-width so it scrolls inside its own container, small phones
  *    stack provider cards and shrink the hero headline, and the
@@ -127,14 +134,19 @@ async function main() {
   // setter + 'input' event does NOT trigger React onChange in jsdom
   // (the DOM value changes but React state never updates — verified in
   // a debug run); Simulate is the canonical way to drive controlled
-  // inputs in tests. Selects work fine with a native 'change' event.
+  // inputs in tests. Selects use Simulate too (see setSelect).
   const { Simulate } = require(path.join(ROOT, "node_modules", "react-dom", "test-utils"));
   const setInput = (el, value) => {
     Simulate.change(el, { target: { value } });
   };
+  // Selects: drive them with React's Simulate.change too. The native
+  // setter + 'change' event is racy in this harness — twice, a select
+  // change on a freshly remounted Campaign view silently failed to
+  // reach React state (the stop test ran a single case instead of all
+  // 76), while the same call worked everywhere else. Simulate invokes
+  // the React handler directly, like setInput above.
   const setSelect = (el, value) => {
-    el.value = value;
-    el.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    Simulate.change(el, { target: { value } });
   };
 
   // --- Interactivity audit: Overview cards, bell, hamburger, user row.
@@ -159,6 +171,31 @@ async function main() {
   await act(async () => { byText("Overview").click(); await sleep(30); });
   await act(async () => { document.querySelector('[aria-label="Notifications"]').click(); await sleep(30); });
   check("bell sets the notice", document.body.textContent.includes("No new system alerts."));
+  // --- Notifications panel: the bell used to only set a status-strip
+  // string, so the tap felt dead — no panel, no toast, no feedback.
+  // It must open a real panel (empty state when there is nothing to
+  // report), and the panel must dismiss three ways.
+  check("bell opens the notifications panel", Boolean(document.querySelector(".notif-panel")));
+  check("panel is labelled as a dialog",
+    document.querySelector(".notif-panel")?.getAttribute("role") === "dialog");
+  check("panel shows the no-alerts empty state",
+    document.querySelector(".notif-panel")?.textContent.includes("No new system alerts."));
+  check("bell reports its expanded state",
+    document.querySelector('[aria-label="Notifications"]')?.getAttribute("aria-expanded") === "true");
+  await act(async () => { document.querySelector('[aria-label="Close notifications"]').click(); await sleep(30); });
+  check("close button dismisses the panel", !document.querySelector(".notif-panel"));
+  await act(async () => { document.querySelector('[aria-label="Notifications"]').click(); await sleep(30); });
+  await act(async () => {
+    document.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await sleep(30);
+  });
+  check("Escape dismisses the panel", !document.querySelector(".notif-panel"));
+  await act(async () => { document.querySelector('[aria-label="Notifications"]').click(); await sleep(30); });
+  await act(async () => {
+    document.body.dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true }));
+    await sleep(30);
+  });
+  check("tap outside dismisses the panel", !document.querySelector(".notif-panel"));
   check("GitHub link points at the repo",
     document.querySelector(".github-link")?.getAttribute("href") === "https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab");
   await act(async () => { document.querySelector(".mobile-menu").click(); await sleep(30); });
@@ -318,8 +355,10 @@ async function main() {
   // jsdom cannot measure real layout (no viewport, no media-query
   // evaluation), so these check the CSS text itself, like the .log-info
   // check above. A real-browser check verifies the rendered result.
-  check("mobile hides topbar bell + avatar",
-    css.includes(".top-actions .icon-btn,.top-actions .top-avatar{display:none}"));
+  check("mobile hides topbar avatar but keeps the bell with a touch-sized target (was: bell hidden, so the panel was unreachable on phones)",
+    css.includes(".top-actions .top-avatar{display:none}")
+    && !css.includes(".top-actions .icon-btn,.top-actions .top-avatar{display:none}")
+    && css.includes(".top-actions .icon-btn{padding:12px}"));
   check("mobile breadcrumb truncates with ellipsis",
     css.includes(".breadcrumb{font-size:8px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}"));
   check("mobile status strip wraps",
@@ -340,9 +379,13 @@ async function main() {
     css.includes(".number-control button{width:34px}"));
   check("mobile key toggles are touch-sized",
     css.includes(".key-toggle{padding:10px}"));
-  check("bell + avatar still in the DOM (hidden by CSS, not removed)",
+  check("bell + avatar still in the DOM (avatar hidden by CSS, bell shown)",
     Boolean(document.querySelector(".top-actions .icon-btn"))
     && Boolean(document.querySelector(".top-actions .top-avatar")));
+  check("notifications panel is anchored under the bell and fits phone widths",
+    css.includes(".notif-panel{position:absolute;top:calc(100% + 10px);right:0;width:340px;max-width:calc(100vw - 24px);"));
+  check("notifications badge rule exists",
+    css.includes(".notif-badge{position:absolute;"));
   // The table only renders while the Campaign tab is active — the
   // Providers check above unmounted it, so switch back first. Results
   // persist in App state, so the table re-renders.
@@ -367,6 +410,18 @@ async function main() {
     document.body.textContent.includes("Stopped by you"));
   check("Stop keeps the completed case",
     [...document.querySelectorAll(".log-line")].some((l) => l.textContent.includes("GL-001")));
+
+  // --- Notifications panel with a real alert: the stopped run recorded
+  // a live warn event, so the panel must list it (not the empty state)
+  // and the bell must show the count.
+  check("bell shows an alert count badge",
+    document.querySelector(".notif-badge")?.textContent === "1",
+    `got ${document.querySelector(".notif-badge")?.textContent}`);
+  await act(async () => { document.querySelector(".notif-btn").click(); await sleep(30); });
+  check("panel lists the stopped-run alert",
+    document.querySelector(".notif-panel")?.textContent.includes("Live campaign stopped"));
+  await act(async () => { document.querySelector('[aria-label="Close notifications"]').click(); await sleep(30); });
+  check("panel closes after showing an alert", !document.querySelector(".notif-panel"));
 
   // --- Download report: the button builds a real JSON report blob.
   // Stub the browser-only parts (object URL + anchor click) to prove

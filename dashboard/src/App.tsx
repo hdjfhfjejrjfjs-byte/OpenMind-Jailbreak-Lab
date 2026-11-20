@@ -79,6 +79,11 @@ export default function App() {
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [cases, setCases] = useState<LabCase[] | null>(null);
   const [casesError, setCasesError] = useState<string | null>(null);
+  const [casesErrorTime, setCasesErrorTime] = useState("");
+  const [notifOpen, setNotifOpen] = useState(false);
+  const bellRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const notifCloseRef = useRef<HTMLButtonElement | null>(null);
   // Run configuration lives here (not in the Campaign view) for the same
   // reason as run state: the Campaign view unmounts when its tab is not
   // active, and config kept in its local state reset to defaults on every
@@ -114,6 +119,7 @@ export default function App() {
       .catch((err: Error) => {
         if (cancelled) return;
         setCasesError(err.message);
+        setCasesErrorTime(nowTime());
         setNotice(`Cases failed to load · ${err.message}`);
       });
     return () => { cancelled = true; };
@@ -125,6 +131,56 @@ export default function App() {
   const stripLabel = run.running
     ? `RUNNING · CASE ${run.done} OF ${run.total}`
     : casesError ? "CASES FAILED" : cases ? "RUNNER READY" : "LOADING CASES…";
+
+  // Notifications are real state only — never invented. An alert is a
+  // cases-load failure or a live run outcome that was not clean (a run
+  // that ended with candidate failures, or one stopped mid-run). The
+  // seed demo events are not alerts. When the list is empty the panel
+  // says so plainly, in the same words the old notice used.
+  const alerts = useMemo(() => {
+    const list: { time: string; title: string; detail: string; type: string }[] = [];
+    if (casesError) list.push({ time: casesErrorTime, title: "Cases failed to load", detail: casesError, type: "bad" });
+    for (const e of events) {
+      if (e.live && (e.type === "bad" || e.type === "warn")) {
+        list.push({ time: e.time, title: e.title, detail: e.detail, type: e.type });
+      }
+    }
+    return list;
+  }, [casesError, casesErrorTime, events]);
+
+  function toggleNotif() {
+    const next = !notifOpen;
+    setNotifOpen(next);
+    if (next) setNotice(alerts.length > 0 ? `${alerts.length} system alert${alerts.length === 1 ? "" : "s"} — review them in the notifications panel.` : "No new system alerts.");
+  }
+  function closeNotif() {
+    setNotifOpen(false);
+    bellRef.current?.focus();
+  }
+  // Dismiss on Escape or a tap/click outside the panel and the bell.
+  // A document listener (not a backdrop element) is used because the
+  // topbar's backdrop-filter would contain a fixed backdrop to the
+  // topbar itself, so taps below it would never reach the backdrop.
+  useEffect(() => {
+    if (!notifOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeNotif(); };
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node | null;
+      if (t && panelRef.current?.contains(t)) return;
+      if (t && bellRef.current?.contains(t)) return;
+      setNotifOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [notifOpen]);
+  // Move keyboard focus into the panel when it opens.
+  useEffect(() => {
+    if (notifOpen) notifCloseRef.current?.focus();
+  }, [notifOpen]);
 
   function toggleProvider(id: string) {
     setSelected(old => old.includes(id) ? old.filter(x => x !== id) : [...old, id]);
@@ -259,7 +315,14 @@ export default function App() {
     <main className="main-area">
       <header className="topbar">
         <div className="top-left"><button className="icon-btn mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={19}/></button><div className="breadcrumb">WORKSPACE <span>/</span> <b>{tab.toUpperCase()}</b></div></div>
-        <div className="top-actions"><div className={`connection-pill ${(cases && !casesError) || run.running ? "connected" : ""}`}><span className="pulse-dot"/>{pillText}</div><button className="icon-btn" aria-label="Notifications" onClick={() => setNotice("No new system alerts.")}><Bell size={17}/></button><div className="top-avatar">O</div></div>
+        <div className="top-actions"><div className={`connection-pill ${(cases && !casesError) || run.running ? "connected" : ""}`}><span className="pulse-dot"/>{pillText}</div><button ref={bellRef} className="icon-btn notif-btn" aria-label={alerts.length > 0 ? `Notifications, ${alerts.length} new` : "Notifications"} aria-expanded={notifOpen} aria-haspopup="dialog" aria-controls="notif-panel" onClick={toggleNotif}><Bell size={17}/>{alerts.length > 0 && <span className="notif-badge" aria-hidden="true">{alerts.length > 9 ? "9+" : alerts.length}</span>}</button><div className="top-avatar">O</div>
+          {notifOpen && <div ref={panelRef} id="notif-panel" className="notif-panel" role="dialog" aria-label="Notifications">
+            <div className="notif-head"><b>NOTIFICATIONS</b><button ref={notifCloseRef} className="icon-btn" aria-label="Close notifications" onClick={closeNotif}><X size={16}/></button></div>
+            {alerts.length === 0
+              ? <div className="notif-empty"><b>No new system alerts.</b><span>Nothing needs your attention — run results and load problems will appear here.</span></div>
+              : <div className="notif-list">{alerts.map((a, i) => <div className="notif-row" key={i}><div className={`event-icon ${a.type}`}>{a.type === "warn" ? <Zap size={14}/> : <Radio size={14}/>}</div><div className="event-copy"><b>{a.title}</b><span>{a.detail}</span></div><time>{a.time}</time></div>)}</div>}
+          </div>}
+        </div>
       </header>
 
       <div className="content-wrap">
