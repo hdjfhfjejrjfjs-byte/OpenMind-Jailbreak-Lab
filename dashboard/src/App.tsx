@@ -67,6 +67,15 @@ function logTextFor(record: RunRecord): string {
   return base;
 }
 
+const pageDescriptions: Record<Tab, string> = {
+  Overview: "Explore the benchmark, configure a campaign, and review the evidence it produces.",
+  "Campaign runner": "Choose your cases, follow live progress, and review each response.",
+  Providers: "Explore the provider catalog and see which target the browser runner supports.",
+  Evidence: "Inspect events recorded during this dashboard session.",
+  Configuration: "Manage the API keys held in this browser session.",
+  Documentation: "Find the steps for running a campaign and interpreting its results."
+};
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("Overview");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -380,7 +389,7 @@ export default function App() {
         <section className="hero-row" key={tab}>
           <div><div className="eyebrow"><span className="eyebrow-line"/> AI SECURITY / RESEARCH ENVIRONMENT</div>
             <h1>{tab === "Overview" ? <>Probe the boundary.<br/><em>Prove the result.</em></> : tab === "Campaign runner" ? <>Campaign <em>control.</em></> : tab === "Providers" ? <>Multi-model <em>matrix.</em></> : tab === "Configuration" ? <>Keys, <em>kept local.</em></> : tab === "Documentation" ? <>How the lab <em>works.</em></> : <>Evidence <em>ledger.</em></>}</h1>
-            <p className="hero-copy">A controlled environment for evaluating instruction boundaries, guardrails, and model robustness — with reproducible evidence.</p>
+            <p className="hero-copy">{pageDescriptions[tab]}</p>
           </div>
           {tab === "Overview" ? <div className="suite-scope"><button type="button" className="suite-dial" aria-label={run.running ? "View active campaign" : "Configure all 76 cases"} onClick={() => openSuite("all")}><i aria-hidden="true"/><b>76</b></button>
             <div className="suite-key"><strong>{run.running ? "Campaign in progress" : "Choose campaign scope"}</strong>
@@ -388,7 +397,7 @@ export default function App() {
                 <button onClick={() => openSuite("core")}>24 core cases ↗</button>
                 <button onClick={() => openSuite("source")}>52 adaptations ↗</button>
               </>}
-            </div></div> : <div className="hero-orb"><div className="orb-ring ring-one"/><div className="orb-ring ring-two"/><div className="orb-core"><Fingerprint size={35}/><span>OMJB</span></div><div className="orb-cross cross-a"/><div className="orb-cross cross-b"/></div>}
+            </div></div> : <button type="button" className="suite-scope overview-return" onClick={() => setTab("Overview")}><span className="suite-dial" aria-hidden="true"><i/><b>76</b></span><span>Back to overview</span></button>}
         </section>
 
         <div className="status-strip"><div className="status-left"><span className="live-dot"/><b>{stripLabel}</b><span className="status-sep">/</span><span>{notice}</span></div><div className="status-right"><span>UTC {new Date().toLocaleTimeString("en-GB",{hour12:false,timeZone:"UTC"})}</span><span className="status-sep">·</span><span>BUILD 0.8.0</span></div></div>
