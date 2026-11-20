@@ -13,6 +13,16 @@ Live demo: https://openmind-jailbreak-lab.vercel.app/
 - Provider keys live in **Configuration**, in page memory only. Gemini is the live runner; the other providers are listed for reference and are not wired yet.
 - Demo mode clearly labels synthetic data. Without a Gemini key the runner points you to Configuration instead of pretending to run.
 
+## Provider support on Vercel
+
+| Providers | Campaign runner behavior |
+| --- | --- |
+| Google Gemini | The browser calls Google's Gemini API with the key and model entered for this session. |
+| OpenAI, Anthropic, DeepSeek, Groq, Together | Reference cards. Selecting a card or entering a key does not route campaign requests to that provider. |
+| Ollama, custom endpoint | Reference cards. The hosted dashboard has no connection to a local Ollama server or custom URL. |
+
+The provider matrix describes the project catalog. For the hosted runner, enter only the Gemini key. GLM, Moonshot, NVIDIA NIM, and OpenRouter are documented separately in the repository adapter matrix.
+
 ## Run locally
 
 ```bash
