@@ -20,6 +20,11 @@
  *    close button, Escape, or a tap outside. The bell stays visible
  *    on phones (was: hidden under 560px, so the panel was unreachable
  *    there) with a touch-sized target.
+ *  - the notifications panel paints above the hero (was: the topbar's
+ *    backdrop-filter trapped the panel below the hero orb, whose
+ *    transform-animated rings covered its text, and the panel
+ *    background was semi-transparent): the topbar is now a positioned
+ *    positive stacking context and the panel background is opaque.
  *  - mobile layout rules (360–430px): the topbar hides its decorative
  *    avatar and the breadcrumb truncates instead of wrapping,
  *    the status strip and notice boxes wrap, the results table has a
@@ -384,6 +389,17 @@ async function main() {
     && Boolean(document.querySelector(".top-actions .top-avatar")));
   check("notifications panel is anchored under the bell and fits phone widths",
     css.includes(".notif-panel{position:absolute;top:calc(100% + 10px);right:0;width:340px;max-width:calc(100vw - 24px);"));
+  // --- Notifications panel layering: the panel must paint above the hero.
+  // The topbar's backdrop-filter creates a stacking context, so the
+  // panel's own z-index could not escape it — the hero orb's
+  // transform-animated rings (later in tree order) painted over the
+  // panel's text. The topbar is now a positioned positive stacking
+  // context, and the panel background is fully opaque (was #101522f2,
+  // so the hero showed through even where the panel was on top).
+  check("topbar is a positioned positive stacking context so the notifications panel paints above the hero",
+    css.includes(".topbar{position:relative;z-index:50;"));
+  check("notifications panel background is fully opaque",
+    css.includes("background:#101522;") && !css.includes("background:#101522f2"));
   check("notifications badge rule exists",
     css.includes(".notif-badge{position:absolute;"));
   // The table only renders while the Campaign tab is active — the
