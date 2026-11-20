@@ -400,6 +400,12 @@ export default function App() {
             </div></div> : <button type="button" className="suite-scope overview-return" onClick={() => setTab("Overview")}><span className="suite-dial" aria-hidden="true"><i/><b>76</b></span><span>Back to overview</span></button>}
         </section>
 
+        <nav className="workspace-tabs" aria-label="Dashboard sections">
+          {navItems.map(({label, icon: Icon}) => <button key={label} type="button"
+            aria-current={tab === label ? "page" : undefined} onClick={() => setTab(label)}>
+            <Icon size={15} aria-hidden="true"/>{label}
+          </button>)}
+        </nav>
         <div className="status-strip"><div className="status-left"><span className="live-dot"/><b>{stripLabel}</b><span className="status-sep">/</span><span>{notice}</span></div><div className="status-right"><span>UTC {new Date().toLocaleTimeString("en-GB",{hour12:false,timeZone:"UTC"})}</span><span className="status-sep">·</span><span>BUILD 0.8.0</span></div></div>
 
         {tab === "Overview" && <Overview setTab={setTab} events={events} run={run}/>}
