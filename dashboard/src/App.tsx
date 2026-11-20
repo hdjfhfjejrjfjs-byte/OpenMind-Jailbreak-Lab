@@ -251,7 +251,7 @@ export default function App() {
           <span className="pulse-dot"/>
         </div>
         <a className="github-link" href="https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab" target="_blank" rel="noreferrer"><Github size={15}/> Repository <ArrowUpRight size={13}/></a>
-        <div className="user-row"><div className="avatar">OM</div><div><b>Operator console</b><span>Local workspace</span></div><ChevronDown size={15}/></div>
+        <div className="user-row" role="button" tabIndex={0} aria-label="Open Configuration" onClick={() => setTab("Configuration")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTab("Configuration"); } }}><div className="avatar">OM</div><div><b>Operator console</b><span>Local workspace</span></div><ChevronDown size={15}/></div>
       </div>
     </aside>
 
@@ -309,9 +309,9 @@ function Overview({setTab, events}: {setTab:(t:Tab)=>void; events:EventItem[]}) 
     </div>
     <div className="section-heading compact"><div><div className="eyebrow">02 / RESEARCH MODULES</div><h2>Lab instruments</h2></div></div>
     <div className="module-grid">
-      <Module icon={Workflow} n="01" title="Mutation & replay" desc="Typed transforms, deterministic seeds, and replayable candidate traces." status="REVIEWED INPUTS"/>
-      <Module icon={Shield} n="02" title="Guardrail evaluation" desc="Structured checks, candidate signals, and human adjudication workflow." status="76 CASES"/>
-      <Module icon={FileCheck2} n="03" title="Evidence & provenance" desc="Run manifests, hashes, trace records, and exportable findings." status="AUDIT READY"/>
+      <Module icon={Workflow} n="01" title="Mutation & replay" desc="Typed transforms, deterministic seeds, and replayable candidate traces." status="REVIEWED INPUTS" onSelect={() => setTab("Documentation")}/>
+      <Module icon={Shield} n="02" title="Guardrail evaluation" desc="Structured checks, candidate signals, and human adjudication workflow." status="76 CASES" onSelect={() => setTab("Campaign runner")}/>
+      <Module icon={FileCheck2} n="03" title="Evidence & provenance" desc="Run manifests, hashes, trace records, and exportable findings." status="AUDIT READY" onSelect={() => setTab("Evidence")}/>
     </div>
     <div className="notice"><ShieldCheck size={17}/><p><b>Research integrity:</b> automated signals are candidates, not proof. Review and reproduce findings before drawing conclusions.</p></div>
   </>;
@@ -320,8 +320,10 @@ function Overview({setTab, events}: {setTab:(t:Tab)=>void; events:EventItem[]}) 
 function Metric({icon:Icon,label,value,sub,color}:{icon:typeof Activity;label:string;value:string;sub:string;color:string}) {
   return <div className={`metric-card metric-${color}`}><div className="metric-top"><span>{label}</span><Icon size={17}/></div><div className="metric-value">{value}</div><div className="metric-sub">{sub}</div><div className="metric-decoration"/></div>;
 }
-function Module({icon:Icon,n,title,desc,status}:{icon:typeof Activity;n:string;title:string;desc:string;status:string}) {
-  return <div className="module-card"><div className="module-top"><div className="module-icon"><Icon size={19}/></div><span>{n}</span></div><h3>{title}</h3><p>{desc}</p><div className="module-status"><i/>{status}<ArrowUpRight size={13}/></div></div>;
+function Module({icon:Icon,n,title,desc,status,onSelect}:{icon:typeof Activity;n:string;title:string;desc:string;status:string;onSelect:()=>void}) {
+  // Cards are navigation, not decoration: the hover lift promises a
+  // click, so each card opens the view it describes (keyboard too).
+  return <div className="module-card" role="button" tabIndex={0} onClick={onSelect} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}><div className="module-top"><div className="module-icon"><Icon size={19}/></div><span>{n}</span></div><h3>{title}</h3><p>{desc}</p><div className="module-status"><i/>{status}<ArrowUpRight size={13}/></div></div>;
 }
 
 function Campaign(props: {

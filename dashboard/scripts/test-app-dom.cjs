@@ -13,6 +13,22 @@
  *    "gemini-3.5-flash-lite", which read as an entered value on an
  *    empty field) and the delay stepper accepts typed input, clamped
  *    to 0–30 (was: static text, buttons only)
+ *  - mobile layout rules (360–430px): the topbar hides its decorative
+ *    bell + avatar and the breadcrumb truncates instead of wrapping,
+ *    the status strip and notice boxes wrap, the results table has a
+ *    min-width so it scrolls inside its own container, small phones
+ *    stack provider cards and shrink the hero headline, and the
+ *    hamburger / delay buttons / key toggles have touch-sized targets.
+ *    jsdom cannot measure real layout, so these pin the CSS rules the
+ *    audit found missing — a real-browser check still verifies the
+ *    rendered result.
+ *  - interactivity audit: every tab, card, and clickable is exercised —
+ *    module cards navigate (were hover-only divs), the operator row
+ *    opens Configuration (was a static row with a chevron), hamburger
+ *    + scrim, bell, GitHub link, provider select/deselect, inline
+ *    Configuration / runner links, key show/hide + clear + clear-all,
+ *    Stop during a multi-case run, Download report (blob stubbed),
+ *    Evidence COPY JSON (clipboard stubbed).
  *
  * Renders the real App in jsdom with fetch stubbed (cases.json from disk,
  * Gemini generateContent canned). Requires jsdom (devDependency) and
@@ -121,6 +137,38 @@ async function main() {
     el.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
   };
 
+  // --- Interactivity audit: Overview cards, bell, hamburger, user row.
+  // (The three module cards used to be hover-only divs with no handler,
+  // and the operator row was a static row with a chevron and no handler.)
+  const moduleCard = (title) =>
+    [...document.querySelectorAll(".module-card")].find((c) => c.textContent.includes(title));
+  await act(async () => { moduleCard("Guardrail evaluation").click(); await sleep(30); });
+  check("module card Guardrail evaluation opens the runner", Boolean(document.getElementById("run-scope")));
+  await act(async () => { byText("Overview").click(); await sleep(30); });
+  await act(async () => { byText("Configure evaluation").click(); await sleep(30); });
+  check("Configure evaluation opens the runner", Boolean(document.getElementById("run-scope")));
+  await act(async () => { byText("Overview").click(); await sleep(30); });
+  await act(async () => { byText("VIEW EVIDENCE LOG").click(); await sleep(30); });
+  check("View evidence log opens Evidence", Boolean(document.querySelector(".evidence-panel")));
+  await act(async () => { byText("Overview").click(); await sleep(30); });
+  await act(async () => { moduleCard("Mutation & replay").click(); await sleep(30); });
+  check("module card Mutation & replay opens Documentation", Boolean(document.querySelector(".doc-panel")));
+  await act(async () => { byText("Overview").click(); await sleep(30); });
+  await act(async () => { moduleCard("Evidence & provenance").click(); await sleep(30); });
+  check("module card Evidence & provenance opens Evidence", Boolean(document.querySelector(".evidence-panel")));
+  await act(async () => { byText("Overview").click(); await sleep(30); });
+  await act(async () => { document.querySelector('[aria-label="Notifications"]').click(); await sleep(30); });
+  check("bell sets the notice", document.body.textContent.includes("No new system alerts."));
+  check("GitHub link points at the repo",
+    document.querySelector(".github-link")?.getAttribute("href") === "https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab");
+  await act(async () => { document.querySelector(".mobile-menu").click(); await sleep(30); });
+  check("hamburger opens the sidebar",
+    document.querySelector(".sidebar")?.classList.contains("sidebar-open") && Boolean(document.querySelector(".scrim")));
+  await act(async () => { document.querySelector(".scrim").click(); await sleep(30); });
+  check("scrim closes the sidebar", !document.querySelector(".sidebar")?.classList.contains("sidebar-open"));
+  await act(async () => { document.querySelector(".user-row").click(); await sleep(30); });
+  check("operator row opens Configuration", Boolean(document.querySelector(".key-panel")));
+
   // --- Tab 1: Campaign runner is reachable and cases loaded.
   await act(async () => { byText("Campaign runner").click(); await sleep(30); });
   check("runner shows scope select", Boolean(document.getElementById("run-scope")));
@@ -218,9 +266,160 @@ async function main() {
     !document.body.textContent.includes("Server-side config"));
   check("Custom endpoint says Not applicable", document.body.textContent.includes("Not applicable"));
 
+  // --- Providers: target toggle + inline Configuration link.
+  const providerCard = (name) =>
+    [...document.querySelectorAll(".provider-card")].find((c) => c.textContent.includes(name));
+  const anthropicBtn = () => providerCard("Anthropic")?.querySelector(".select-provider");
+  check("Anthropic starts unselected", anthropicBtn()?.textContent.includes("Add target"));
+  await act(async () => { anthropicBtn().click(); await sleep(20); });
+  check("provider toggle selects a target", anthropicBtn()?.textContent.includes("Selected"));
+  await act(async () => { anthropicBtn().click(); await sleep(20); });
+  check("provider toggle deselects again", anthropicBtn()?.textContent.includes("Add target"));
+  const inlineConfig = [...document.querySelectorAll("button.inline-action")]
+    .find((b) => b.textContent.trim() === "Configuration");
+  await act(async () => { inlineConfig.click(); await sleep(30); });
+  check("Providers notice link opens Configuration", Boolean(document.querySelector(".key-panel")));
+
+  // --- Documentation: inline navigation buttons.
+  await act(async () => { byText("Documentation").click(); await sleep(30); });
+  const docConfig = [...document.querySelectorAll("button.inline-action")]
+    .find((b) => b.textContent.trim() === "Configuration");
+  await act(async () => { docConfig.click(); await sleep(30); });
+  check("Documentation link opens Configuration", Boolean(document.querySelector(".key-panel")));
+  await act(async () => { byText("Documentation").click(); await sleep(30); });
+  const docRunner = [...document.querySelectorAll("button.inline-action")]
+    .find((b) => b.textContent.trim() === "Campaign runner");
+  await act(async () => { docRunner.click(); await sleep(30); });
+  check("Documentation link opens the runner", Boolean(document.getElementById("run-scope")));
+
+  // --- Configuration: show/hide, clear one key, clear all.
+  await act(async () => { byText("Configuration").click(); await sleep(30); });
+  const geminiInput = () => document.querySelector('input[aria-label="Google Gemini API key"]');
+  check("Gemini key still set", geminiInput()?.value === "test-key-not-real");
+  await act(async () => { document.querySelector('[aria-label="Show Google Gemini key"]').click(); await sleep(20); });
+  check("show key reveals the value", geminiInput()?.type === "text");
+  await act(async () => { document.querySelector('[aria-label="Hide Google Gemini key"]').click(); await sleep(20); });
+  check("hide key masks the value again", geminiInput()?.type === "password");
+  await act(async () => { document.querySelector('[aria-label="Clear Google Gemini key"]').click(); await sleep(20); });
+  check("clear key empties the field", geminiInput()?.value === "");
+  await act(async () => { setInput(geminiInput(), "test-key-not-real"); await sleep(20); });
+  const openaiInput = () => document.querySelector('input[aria-label="OpenAI API key"]');
+  await act(async () => { setInput(openaiInput(), "test-openai-key"); await sleep(20); });
+  await act(async () => { byText("CLEAR ALL KEYS").click(); await sleep(20); });
+  check("clear all empties the Gemini key", geminiInput()?.value === "");
+  check("clear all empties the OpenAI key", openaiInput()?.value === "");
+  await act(async () => { setInput(geminiInput(), "test-key-not-real"); await sleep(20); });
+
   // --- Fix 4: .log-info CSS rule present.
   const css = fs.readFileSync(path.join(ROOT, "src", "styles.css"), "utf8");
   check(".log-info rule exists in styles.css", css.includes(".log-info{border-left-color:var(--cyan)}"));
+
+  // --- Mobile layout: pin the rules the phone-width audit found missing.
+  // jsdom cannot measure real layout (no viewport, no media-query
+  // evaluation), so these check the CSS text itself, like the .log-info
+  // check above. A real-browser check verifies the rendered result.
+  check("mobile hides topbar bell + avatar",
+    css.includes(".top-actions .icon-btn,.top-actions .top-avatar{display:none}"));
+  check("mobile breadcrumb truncates with ellipsis",
+    css.includes(".breadcrumb{font-size:8px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}"));
+  check("mobile status strip wraps",
+    css.includes(".status-left{flex-wrap:wrap}"));
+  check("mobile status right drops its column indent",
+    css.includes(".status-right{margin-left:0}"));
+  check("mobile notice wraps with its action on its own line",
+    css.includes(".notice{flex-wrap:wrap}") && css.includes(".notice .text-action{margin-left:auto}"));
+  check("results table has a min-width so it scrolls inside its container",
+    css.includes(".results-table{width:100%;min-width:520px;"));
+  check("results cells break long unbroken tokens",
+    css.includes(".results-table td{padding:8px 10px;border-bottom:1px solid #ffffff0b;vertical-align:top;overflow-wrap:anywhere}"));
+  check("small phones shrink the hero headline and stack provider cards",
+    css.includes("@media(max-width:400px){h1{font-size:31px;letter-spacing:-1.6px}.providers-grid{grid-template-columns:1fr}}"));
+  check("mobile hamburger has a touch-sized target",
+    css.includes(".mobile-menu{padding:12px}"));
+  check("mobile delay buttons are touch-sized",
+    css.includes(".number-control button{width:34px}"));
+  check("mobile key toggles are touch-sized",
+    css.includes(".key-toggle{padding:10px}"));
+  check("bell + avatar still in the DOM (hidden by CSS, not removed)",
+    Boolean(document.querySelector(".top-actions .icon-btn"))
+    && Boolean(document.querySelector(".top-actions .top-avatar")));
+  // The table only renders while the Campaign tab is active — the
+  // Providers check above unmounted it, so switch back first. Results
+  // persist in App state, so the table re-renders.
+  await act(async () => { byText("Campaign runner").click(); await sleep(30); });
+  check("results table sits inside its scroll container",
+    Boolean(document.querySelector(".results-wrap .results-table")));
+
+  // --- Stop: a multi-case run can be aborted mid-wait (the earlier
+  // single-case run finished too fast to show the Stop button).
+  await act(async () => { setSelect(document.getElementById("run-scope"), "all"); await sleep(20); });
+  const delayInput2 = document.querySelector(".number-control input");
+  await act(async () => { setInput(delayInput2, "30"); await sleep(20); });
+  const runBtn3 = [...document.querySelectorAll("button")].find((b) => b.textContent.includes("Run campaign"));
+  check("Run enabled for the stop test", runBtn3.disabled === false);
+  await act(async () => { runBtn3.click(); await sleep(300); });
+  const stopBtn = [...document.querySelectorAll("button")].find((b) => b.textContent.includes("Stop run"));
+  check("Stop button appears while running", Boolean(stopBtn));
+  if (stopBtn) {
+    await act(async () => { stopBtn.click(); await sleep(300); });
+  }
+  check("Stop ends the run with a stopped message",
+    document.body.textContent.includes("Stopped by you"));
+  check("Stop keeps the completed case",
+    [...document.querySelectorAll(".log-line")].some((l) => l.textContent.includes("GL-001")));
+
+  // --- Download report: the button builds a real JSON report blob.
+  // Stub the browser-only parts (object URL + anchor click) to prove
+  // the handler wires them correctly.
+  let capturedBlob = null;
+  let capturedDownload = null;
+  const origCreateObjectURL = global.URL.createObjectURL;
+  const origAnchorClick = dom.window.HTMLAnchorElement.prototype.click;
+  global.URL.createObjectURL = (blob) => { capturedBlob = blob; return "blob:test-report"; };
+  dom.window.HTMLAnchorElement.prototype.click = function () {
+    capturedDownload = this.getAttribute("download");
+  };
+  const dlBtn = [...document.querySelectorAll("button")].find((b) => b.textContent.includes("DOWNLOAD REPORT (JSON)"));
+  check("download button appears after a run", Boolean(dlBtn));
+  if (dlBtn) {
+    await act(async () => { dlBtn.click(); await sleep(20); });
+  }
+  check("download creates a JSON blob",
+    Boolean(capturedBlob) && capturedBlob.type === "application/json",
+    capturedBlob ? `type ${capturedBlob.type}` : "no blob captured");
+  const reportText = capturedBlob ? await capturedBlob.text() : "";
+  check("downloaded report is the guardrail report",
+    reportText.includes('"tool": "guardrail-lab"') && reportText.includes("GL-001"));
+  check("download filename ends in .json",
+    typeof capturedDownload === "string" && capturedDownload.endsWith(".json"),
+    `got ${capturedDownload}`);
+  global.URL.createObjectURL = origCreateObjectURL;
+  dom.window.HTMLAnchorElement.prototype.click = origAnchorClick;
+
+  // --- Evidence: COPY JSON copies the ledger (clipboard stubbed, since
+  // jsdom has no clipboard — the handler's no-clipboard fallback is a
+  // separate branch, not covered here).
+  let copiedText = null;
+  Object.defineProperty(dom.window.navigator, "clipboard", {
+    value: { writeText: async (t) => { copiedText = t; } },
+    configurable: true,
+  });
+  await act(async () => { byText("Evidence").click(); await sleep(30); });
+  const copyBtn = [...document.querySelectorAll("button")].find((b) => b.textContent.includes("COPY JSON"));
+  check("Evidence has a copy button", Boolean(copyBtn));
+  if (copyBtn) {
+    await act(async () => { copyBtn.click(); await sleep(50); });
+  }
+  let copiedOk = false;
+  try {
+    const parsed = JSON.parse(copiedText || "null");
+    copiedOk = Array.isArray(parsed) && parsed.length >= 4
+      && parsed.some((e) => e.title && e.title.includes("Live campaign"));
+  } catch { copiedOk = false; }
+  check("copy JSON copies the event ledger", copiedOk,
+    copiedText ? `got ${String(copiedText).slice(0, 80)}` : "nothing copied");
+  check("copy reports success in the notice",
+    document.body.textContent.includes("Evidence JSON copied to clipboard."));
 
   // --- Static: no key storage APIs actually used in src. (The words
   // appear in comments and UI copy — "never written to localStorage" —
