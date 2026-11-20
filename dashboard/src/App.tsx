@@ -373,7 +373,7 @@ export default function App() {
       </header>
 
       <div className="content-wrap">
-        <section className="hero-row">
+        <section className="hero-row" key={tab}>
           <div><div className="eyebrow"><span className="eyebrow-line"/> AI SECURITY / RESEARCH ENVIRONMENT</div>
             <h1>{tab === "Overview" ? <>Probe the boundary.<br/><em>Prove the result.</em></> : tab === "Campaign runner" ? <>Campaign <em>control.</em></> : tab === "Providers" ? <>Multi-model <em>matrix.</em></> : tab === "Configuration" ? <>Keys, <em>kept local.</em></> : tab === "Documentation" ? <>How the lab <em>works.</em></> : <>Evidence <em>ledger.</em></>}</h1>
             <p className="hero-copy">A controlled environment for evaluating instruction boundaries, guardrails, and model robustness — with reproducible evidence.</p>
@@ -383,7 +383,7 @@ export default function App() {
 
         <div className="status-strip"><div className="status-left"><span className="live-dot"/><b>{stripLabel}</b><span className="status-sep">/</span><span>{notice}</span></div><div className="status-right"><span>UTC {new Date().toLocaleTimeString("en-GB",{hour12:false,timeZone:"UTC"})}</span><span className="status-sep">·</span><span>BUILD 0.8.0</span></div></div>
 
-        {tab === "Overview" && <Overview setTab={setTab} events={events}/>}
+        {tab === "Overview" && <Overview setTab={setTab} events={events} run={run}/>}
         {tab === "Campaign runner" && <Campaign cases={cases} casesError={casesError} geminiKey={geminiKey} onGoToConfig={() => setTab("Configuration")} run={run} onStart={startRun} onStop={stopRun} stopping={stopping} onDownload={downloadReport} onDownloadCsv={downloadCsv} onShare={shareResults} model={runModel} setModel={setRunModel} scope={runScope} setScope={setRunScope} singleId={runSingleId} setSingleId={setRunSingleId} delay={runDelay} setDelay={setRunDelay} />}
         {tab === "Providers" && <Providers selected={selected} toggle={toggleProvider} setTab={setTab}/>}
         {tab === "Evidence" && <Evidence events={events} notify={setNotice}/>}
@@ -395,7 +395,7 @@ export default function App() {
   </div>;
 }
 
-function Overview({setTab, events}: {setTab:(t:Tab)=>void; events:EventItem[]}) {
+function Overview({setTab, events, run}: {setTab:(t:Tab)=>void; events:EventItem[]; run: {results: RunRecord[]; running: boolean}}) {
   const live = events.some(e => e.live);
   return <>
     <div className="metrics-grid">
@@ -404,6 +404,7 @@ function Overview({setTab, events}: {setTab:(t:Tab)=>void; events:EventItem[]}) 
       <Metric icon={Activity} label="EVIDENCE EVENTS" value={String(events.length).padStart(2,"0")} sub="This browser session" color="pink"/>
       <Metric icon={Gauge} label="RUN BUDGET" value="READY" sub="Finite limits configurable" color="green"/>
     </div>
+    <ResponseTimes results={run.results} running={run.running}/>
     <div className="section-heading"><div><div className="eyebrow">01 / CONTROL DECK</div><h2>Evaluation overview</h2></div><button className="text-action" onClick={() => setTab("Campaign runner")}>OPEN CAMPAIGN RUNNER <ArrowUpRight size={14}/></button></div>
     <div className="dashboard-grid">
       <div className="panel suite-panel"><div className="panel-head"><div><span className="panel-kicker">ACTIVE SUITE</span><h3>Guardrail Lab</h3></div><span className="tag tag-green">READY</span></div>
@@ -511,7 +512,7 @@ function Campaign(props: {
     if (el) el.scrollTop = el.scrollHeight;
   }, [run.log]);
   useEffect(() => {
-    if (run.running) progressRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (run.running) progressRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
   }, [run.running]);
 
   const canRun = Boolean(props.cases && props.geminiKey && !run.running && model.trim() !== "");
