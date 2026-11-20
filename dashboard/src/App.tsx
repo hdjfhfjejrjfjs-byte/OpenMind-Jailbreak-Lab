@@ -101,6 +101,7 @@ export default function App() {
     status: "", report: null, done: 0, total: 0, stoppedByUser: false,
   });
   const runAbort = useRef<AbortController | null>(null);
+  const [stopping, setStopping] = useState(false);
 
   const geminiKey = keys.gemini ?? "";
   const runnerToken = keys.runnerToken ?? "";
@@ -207,6 +208,7 @@ export default function App() {
     const selected = selectCases(cases, config.scope, config.singleId);
     const controller = new AbortController();
     runAbort.current = controller;
+    setStopping(false);
     const stamp = nowTime();
     setRun(prev => ({
       ...prev, running: true, results: [], report: null, done: 0,
@@ -281,10 +283,14 @@ export default function App() {
       live: true,
     }, ...old]);
     runAbort.current = null;
+    setStopping(false);
   }
 
   function stopRun() {
-    runAbort.current?.abort();
+    if (!runAbort.current || runAbort.current.signal.aborted) return;
+    setStopping(true);
+    setRun(prev => ({ ...prev, status: "Stopping campaign — cancelling the current request and preserving completed results…", log: [...prev.log.slice(-999), {time: nowTime(), text: "Stop requested — cancelling outstanding work.", kind: "warn" as const}] }));
+    runAbort.current.abort();
   }
 
   function downloadReport() {
@@ -399,7 +405,7 @@ export default function App() {
         <div className="status-strip"><div className="status-left"><span className="live-dot"/><b>{stripLabel}</b><span className="status-sep">/</span><span>{notice}</span></div><div className="status-right"><span>UTC {new Date().toLocaleTimeString("en-GB",{hour12:false,timeZone:"UTC"})}</span><span className="status-sep">·</span><span>BUILD 0.8.0</span></div></div>
 
         {tab === "Overview" && <Overview setTab={setTab} events={events}/>}
-        {tab === "Campaign runner" && <Campaign cases={cases} casesError={casesError} geminiKey={runnerCredential} onGoToConfig={() => setTab("Configuration")} run={run} onStart={startRun} onStop={stopRun} onDownload={downloadReport} onDownloadCsv={downloadCsv} onShare={shareResults} model={runModel} setModel={setRunModel} scope={runScope} setScope={setRunScope} singleId={runSingleId} setSingleId={setRunSingleId} delay={runDelay} setDelay={setRunDelay} />}
+        {tab === "Campaign runner" && <Campaign cases={cases} casesError={casesError} geminiKey={runnerCredential} onGoToConfig={() => setTab("Configuration")} run={run} onStart={startRun} onStop={stopRun} stopping={stopping} onDownload={downloadReport} onDownloadCsv={downloadCsv} onShare={shareResults} model={runModel} setModel={setRunModel} scope={runScope} setScope={setRunScope} singleId={runSingleId} setSingleId={setRunSingleId} delay={runDelay} setDelay={setRunDelay} />}
         {tab === "Providers" && <Providers selected={selected} toggle={toggleProvider} setTab={setTab}/>}
         {tab === "Evidence" && <Evidence events={events} notify={setNotice}/>}
         {tab === "Configuration" && <Configuration keys={keys} setKey={setKey} clearKey={clearKey} clearAllKeys={clearAllKeys}/>}
@@ -455,7 +461,7 @@ function Campaign(props: {
   cases: LabCase[] | null; casesError: string | null; geminiKey: string;
   onGoToConfig: () => void; run: RunState;
   onStart: (config: { model: string; scope: Scope; singleId: string; delay: number }) => void;
-  onStop: () => void; onDownload: () => void; onDownloadCsv: () => void; onShare: () => void;
+  onStop: () => void; stopping: boolean; onDownload: () => void; onDownloadCsv: () => void; onShare: () => void;
   model: string; setModel: (m: string) => void;
   scope: Scope; setScope: (s: Scope) => void;
   singleId: string; setSingleId: (id: string) => void;
@@ -554,7 +560,7 @@ function Campaign(props: {
         <label>DELAY (SEC) <div className="number-control"><button aria-label="Decrease delay" onClick={() => setDelay(Math.max(0, delay - 1))}>−</button><input className="number-input" type="text" inputMode="numeric" aria-label="Delay in seconds" value={delayDraft} onChange={e => { const v = e.target.value; if (!/^\d*$/.test(v)) return; setDelayDraft(v); if (v !== "") setDelay(Math.min(30, Math.max(0, parseInt(v, 10)))); }} onBlur={() => setDelayDraft(String(delay))} /><button aria-label="Increase delay" onClick={() => setDelay(Math.min(30, delay + 1))}>+</button></div></label>
       </div>
       <button className="primary-btn run-btn" disabled={!canRun} onClick={() => props.onStart({ model, scope, singleId, delay })}>{run.running ? <RefreshCw size={16} className="spin"/> : <Play size={16} fill="currentColor"/>}{run.running ? "Running…" : "Run campaign"}<ArrowUpRight size={15}/></button>
-      {run.running && <button className="primary-btn stop-btn" onClick={props.onStop}><Square size={15} fill="currentColor"/> Stop run</button>}
+      {run.running && <button type="button" className="primary-btn stop-btn" disabled={props.stopping} onClick={props.onStop} aria-live="polite" style={{minHeight:52,touchAction:"manipulation",opacity:props.stopping ? .7 : 1}}><Square size={15} fill="currentColor"/> {props.stopping ? "Stopping…" : "Stop campaign"}</button>}
       <div className="safe-note"><LockKeyhole size={14}/><span>Runs in this browser against Gemini. Your key is kept in page memory only and sent only to Google's API — never stored, logged, or sent anywhere else.</span></div>
 
       <div className="run-progress" ref={progressRef}>
