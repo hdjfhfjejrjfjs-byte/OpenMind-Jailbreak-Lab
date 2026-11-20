@@ -87,3 +87,38 @@
 }
 @keyframes response-rise { from { transform: scaleY(0); } }
 @keyframes response-pulse { 0% { box-shadow: 0 0 0 0 #55f3f299; } 75%, 100% { box-shadow: 0 0 0 6px transparent; } }
+
+@keyframes deck-enter {
+  from { opacity: .35; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes deck-trace {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes deck-scan {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(340%); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hero-row > :first-child, .metric-card, .panel, .module-card, .review-case,
+  .event-row, .evidence-row, .doc-list > li, .key-row {
+    animation: deck-enter .34s ease-out backwards;
+  }
+  :is(.metrics-grid, .providers-grid, .module-grid, .doc-list, .event-list) > :nth-child(2) { animation-delay: 45ms; }
+  :is(.metrics-grid, .providers-grid, .module-grid, .doc-list, .event-list) > :nth-child(3) { animation-delay: 90ms; }
+  :is(.metrics-grid, .providers-grid, .doc-list, .event-list) > :nth-child(n+4) { animation-delay: 135ms; }
+  .eyebrow-line, .suite-panel .progress-track i { transform-origin: left; animation: deck-trace .7s ease-out; }
+  .status-strip { position: relative; overflow: hidden; }
+  .status-strip::after { content: ""; position: absolute; bottom: 0; left: 0; width: 32%; height: 1px; pointer-events: none; background: linear-gradient(90deg, transparent, var(--cyan), transparent); animation: deck-scan 4s ease-in-out 1; animation-fill-mode: forwards; }
+  .run-progress .progress-track i { transition: width .38s ease-out; }
+  .nav-item.active svg:first-child { animation: deck-enter .25s ease-out; }
+  :is(.primary-btn, .provider-pick, .select-provider, .nav-item):active { transform: scale(.985); }
+  .metric-decoration { transition: transform .3s ease-out; }
+  @media (hover: hover) {
+    .metric-card:hover .metric-decoration { transform: translate(-5px, -5px) rotate(55deg); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
