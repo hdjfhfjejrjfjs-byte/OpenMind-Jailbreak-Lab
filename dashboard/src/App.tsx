@@ -341,6 +341,13 @@ function Campaign(props: {
   // passed down, so it survives tab switches — the Campaign view unmounts
   // when its tab is not active, and local state here used to reset.
   const { model, setModel, scope, setScope, singleId, setSingleId, delay, setDelay } = props;
+  // The delay stepper shows a typable field (was: static text, buttons
+  // only). The draft holds in-progress typing — e.g. an empty field while
+  // the user retypes — so the input never fights the keystroke; valid
+  // numbers commit to App state immediately, clamped to the buttons'
+  // 0–30 range, and blur restores the committed value.
+  const [delayDraft, setDelayDraft] = useState(String(delay));
+  useEffect(() => { setDelayDraft(String(delay)); }, [delay]);
   const buckets = useMemo(() => summaryBuckets(run.results), [run.results]);
   const selectedCount = props.cases ? selectCases(props.cases, scope, singleId).length : 0;
   const pct = run.total > 0 ? Math.round((run.done / run.total) * 100) : 0;
@@ -362,7 +369,7 @@ function Campaign(props: {
       {props.casesError && <div className="notice"><Shield size={17}/><p><b>Cases failed to load.</b> {props.casesError} — the runner cannot start until cases.json loads.</p></div>}
       {!props.casesError && !props.geminiKey && <div className="notice"><KeyRound size={17}/><p><b>No Gemini key configured.</b> The runner reads its key from Configuration — add it there and come back.</p><button className="text-action" onClick={props.onGoToConfig}>OPEN CONFIGURATION <ArrowUpRight size={14}/></button></div>}
       <label className="field-label" htmlFor="run-model">MODEL</label>
-      <input id="run-model" className="text-field" type="text" value={model} onChange={e => setModel(e.target.value)} placeholder="gemini-3.5-flash-lite" />
+      <input id="run-model" className="text-field" type="text" value={model} onChange={e => setModel(e.target.value)} placeholder="model name" />
       {!model.trim() && <p className="key-hint">Enter a model name to run — a blank model stops after the first case with a 404.</p>}
       <label className="field-label" htmlFor="run-scope">SCOPE</label>
       <select id="run-scope" className="select-field" value={scope} onChange={e => setScope(e.target.value as Scope)}>
@@ -377,7 +384,7 @@ function Campaign(props: {
       </select></>}
       <div className="field-label limits-label">DELAY BETWEEN CALLS <span>SECONDS · FREE-TIER FRIENDLY</span></div>
       <div className="limits-grid">
-        <label>DELAY (SEC) <div className="number-control"><button aria-label="Decrease delay" onClick={() => setDelay(Math.max(0, delay - 1))}>−</button><b>{delay}</b><button aria-label="Increase delay" onClick={() => setDelay(Math.min(30, delay + 1))}>+</button></div></label>
+        <label>DELAY (SEC) <div className="number-control"><button aria-label="Decrease delay" onClick={() => setDelay(Math.max(0, delay - 1))}>−</button><input className="number-input" type="text" inputMode="numeric" aria-label="Delay in seconds" value={delayDraft} onChange={e => { const v = e.target.value; if (!/^\d*$/.test(v)) return; setDelayDraft(v); if (v !== "") setDelay(Math.min(30, Math.max(0, parseInt(v, 10)))); }} onBlur={() => setDelayDraft(String(delay))} /><button aria-label="Increase delay" onClick={() => setDelay(Math.min(30, delay + 1))}>+</button></div></label>
       </div>
       <button className="primary-btn run-btn" disabled={!canRun} onClick={() => props.onStart({ model, scope, singleId, delay })}>{run.running ? <RefreshCw size={16} className="spin"/> : <Play size={16} fill="currentColor"/>}{run.running ? "Running…" : "Run campaign"}<ArrowUpRight size={15}/></button>
       {run.running && <button className="primary-btn stop-btn" onClick={props.onStop}><Square size={15} fill="currentColor"/> Stop run</button>}

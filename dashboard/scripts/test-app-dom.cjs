@@ -9,6 +9,10 @@
  *    Evidence badge counts the new live event (was: hardcoded "03")
  *  - the Custom endpoint provider row no longer says "Server-side config"
  *  - the .log-info CSS rule exists, so info log lines get the cyan accent
+ *  - the model field's placeholder is not a model name (was:
+ *    "gemini-3.5-flash-lite", which read as an entered value on an
+ *    empty field) and the delay stepper accepts typed input, clamped
+ *    to 0–30 (was: static text, buttons only)
  *
  * Renders the real App in jsdom with fetch stubbed (cases.json from disk,
  * Gemini generateContent canned). Requires jsdom (devDependency) and
@@ -130,16 +134,42 @@ async function main() {
   const inc = document.querySelector('[aria-label="Increase delay"]');
   for (let i = 0; i < 5; i++) await act(async () => { inc.click(); await sleep(10); });
   check("scope set to source before switch", document.getElementById("run-scope").value === "source");
-  check("delay set to 10 before switch", document.querySelector(".number-control b").textContent === "10");
+  check("delay set to 10 before switch", document.querySelector(".number-control input")?.value === "10",
+    `got ${document.querySelector(".number-control input")?.value}`);
   check("model set before switch", document.getElementById("run-model").value === "gemini-2.0-flash");
   await act(async () => { byText("Evidence").click(); await sleep(30); });
   await act(async () => { byText("Campaign runner").click(); await sleep(30); });
   check("scope survives tab switch", document.getElementById("run-scope").value === "source",
     `got ${document.getElementById("run-scope")?.value}`);
-  check("delay survives tab switch", document.querySelector(".number-control b").textContent === "10",
-    `got ${document.querySelector(".number-control b")?.textContent}`);
+  check("delay survives tab switch", document.querySelector(".number-control input")?.value === "10",
+    `got ${document.querySelector(".number-control input")?.value}`);
   check("model survives tab switch", document.getElementById("run-model").value === "gemini-2.0-flash",
     `got ${document.getElementById("run-model")?.value}`);
+
+  // --- Fix 6: model placeholder must not read as a model name.
+  check("model placeholder is not a model name",
+    document.getElementById("run-model").getAttribute("placeholder") === "model name",
+    `got ${document.getElementById("run-model")?.getAttribute("placeholder")}`);
+
+  // --- Fix 7: delay accepts typed input (was: static text, buttons only).
+  const delayInput = document.querySelector(".number-control input");
+  check("delay has a typable input", Boolean(delayInput));
+  if (delayInput) {
+    await act(async () => { setInput(delayInput, "12"); await sleep(20); });
+    check("typed delay updates the field", delayInput.value === "12", `got ${delayInput.value}`);
+    const delayRow = [...document.querySelectorAll(".summary-row")]
+      .find((r) => r.textContent.startsWith("Delay"));
+    check("run summary reflects typed delay", Boolean(delayRow?.textContent.includes("12s")),
+      `got ${delayRow?.textContent}`);
+    await act(async () => { setInput(delayInput, "99"); await sleep(20); });
+    check("typed delay clamps to 30", delayInput.value === "30", `got ${delayInput.value}`);
+    await act(async () => { setInput(delayInput, ""); await sleep(20); });
+    check("clearing delay leaves the field empty until blur", delayInput.value === "");
+    await act(async () => { Simulate.blur(delayInput); await sleep(20); });
+    check("blur restores the committed delay", delayInput.value === "30", `got ${delayInput.value}`);
+    await act(async () => { setInput(delayInput, "10"); await sleep(20); });
+    check("delay restored to 10", delayInput.value === "10", `got ${delayInput.value}`);
+  }
 
   // --- Fix 5: blank model disables Run.
   await act(async () => {
