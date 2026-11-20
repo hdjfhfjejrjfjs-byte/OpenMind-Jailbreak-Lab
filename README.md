@@ -116,6 +116,8 @@ Read: [Multi-provider evaluator guide](docs/chat-completions-evaluator.md)
 | Custom endpoint | OpenAI-compatible | Operator-selected env var |
 | Echo | Offline smoke-test target | None |
 
+On the [Vercel dashboard](https://openmind-jailbreak-lab.vercel.app/), Gemini is the only provider connected to the browser campaign runner. See [hosted provider support](dashboard/README.md#provider-support-on-vercel) for the behavior of each dashboard card.
+
 The wider Guardrail Lab adapter matrix also documents GLM/Zhipu, Moonshot, NVIDIA NIM, OpenRouter, and compatible local/server endpoints. Support depends on the adapter, model identifier, endpoint, credentials, and provider limits.
 
 ## // Quick start
