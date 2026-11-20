@@ -103,6 +103,8 @@ export default function App() {
   const runAbort = useRef<AbortController | null>(null);
 
   const geminiKey = keys.gemini ?? "";
+  const runnerToken = keys.runnerToken ?? "";
+  const runnerCredential = runnerToken || geminiKey;
 
   useEffect(() => {
     let cancelled = false;
@@ -201,7 +203,7 @@ export default function App() {
   }
 
   async function startRun(config: { model: string; scope: Scope; singleId: string; delay: number }) {
-    if (run.running || !cases || !geminiKey) return;
+    if (run.running || !cases || !runnerCredential) return;
     const selected = selectCases(cases, config.scope, config.singleId);
     const controller = new AbortController();
     runAbort.current = controller;
@@ -214,9 +216,29 @@ export default function App() {
     }));
     setNotice(`Running — case 1 of ${selected.length}`);
     const res: RunSuiteResult = await runSuite(cases, {
-      model: config.model, key: geminiKey, scope: config.scope,
+      model: config.model, key: runnerCredential, scope: config.scope,
       singleId: config.singleId, delaySeconds: config.delay,
       signal: controller.signal,
+      ...(runnerToken ? { fetchFn: async (_url: string, init: RequestInit) => {
+        const original = JSON.parse(String(init.body));
+        const messages = (original.contents || []).map((c: { role: string; parts: { text: string }[] }) => ({
+          role: c.role === "model" ? "assistant" : "user",
+          content: c.parts.map(p => p.text).join("\n"),
+        }));
+        const response = await fetch("/api/gemini", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${runnerToken}` },
+          body: JSON.stringify({ model: config.model, messages }),
+          signal: init.signal,
+        });
+        if (!response.ok) return response;
+        const result = await response.json();
+        return new Response(JSON.stringify({
+          candidates: [{ content: { parts: [{ text: result.text }] },
+            finishReason: result.metadata?.finishReason, safetyRatings: result.metadata?.safetyRatings }],
+          promptFeedback: result.metadata?.promptFeedback,
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      } } : {}),
       onRecord: (record) => {
         setRun(prev => ({
           ...prev,
@@ -275,6 +297,46 @@ export default function App() {
     a.click();
     URL.revokeObjectURL(url);
     setNotice("Run report downloaded as JSON.");
+  }
+
+  function downloadCsv() {
+    if (!run.results.length) return;
+    const quote = (value: unknown) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
+    const rows = [
+      ["case_id", "assessment", "duration_seconds", "response", "error"],
+      ...run.results.map(r => [r.case_id, r.assessment, r.duration_seconds, r.response ?? "", r.error?.message ?? ""]),
+    ];
+    const csv = "\uFEFF" + rows.map(row => row.map(quote).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `guardrail-results-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice("Run results downloaded as CSV.");
+  }
+
+  async function shareResults() {
+    if (!run.report || !run.results.length) return;
+    // Share a concise summary, not raw prompts, responses, tokens, or credentials.
+    const counts = summaryBuckets(run.results);
+    const summary = `OpenMind evaluation results\nCases: ${run.results.length}\nBoundary held: ${counts.held}\nPotential failures: ${counts.failures}\nManual review: ${counts.manualReview}\nDashboard: https://openmind-jailbreak-lab.vercel.app/\n\nResults are session-local; this link does not contain the report. Download JSON or CSV to share the full evidence.`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "OpenMind evaluation summary", text: summary });
+        setNotice("Summary shared using your device.");
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(summary);
+        setNotice("Summary copied to clipboard. Share it wherever you like.");
+      } else {
+        setNotice("Sharing is unavailable in this browser; download JSON or CSV instead.");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return;
+      setNotice("Sharing failed. Download JSON or CSV instead.");
+    }
   }
 
   const navItems: { label: Tab; icon: typeof LayoutDashboard }[] = [
@@ -337,7 +399,7 @@ export default function App() {
         <div className="status-strip"><div className="status-left"><span className="live-dot"/><b>{stripLabel}</b><span className="status-sep">/</span><span>{notice}</span></div><div className="status-right"><span>UTC {new Date().toLocaleTimeString("en-GB",{hour12:false,timeZone:"UTC"})}</span><span className="status-sep">·</span><span>BUILD 0.8.0</span></div></div>
 
         {tab === "Overview" && <Overview setTab={setTab} events={events}/>}
-        {tab === "Campaign runner" && <Campaign cases={cases} casesError={casesError} geminiKey={geminiKey} onGoToConfig={() => setTab("Configuration")} run={run} onStart={startRun} onStop={stopRun} onDownload={downloadReport} model={runModel} setModel={setRunModel} scope={runScope} setScope={setRunScope} singleId={runSingleId} setSingleId={setRunSingleId} delay={runDelay} setDelay={setRunDelay} />}
+        {tab === "Campaign runner" && <Campaign cases={cases} casesError={casesError} geminiKey={runnerCredential} onGoToConfig={() => setTab("Configuration")} run={run} onStart={startRun} onStop={stopRun} onDownload={downloadReport} onDownloadCsv={downloadCsv} onShare={shareResults} model={runModel} setModel={setRunModel} scope={runScope} setScope={setRunScope} singleId={runSingleId} setSingleId={setRunSingleId} delay={runDelay} setDelay={setRunDelay} />}
         {tab === "Providers" && <Providers selected={selected} toggle={toggleProvider} setTab={setTab}/>}
         {tab === "Evidence" && <Evidence events={events} notify={setNotice}/>}
         {tab === "Configuration" && <Configuration keys={keys} setKey={setKey} clearKey={clearKey} clearAllKeys={clearAllKeys}/>}
@@ -393,7 +455,7 @@ function Campaign(props: {
   cases: LabCase[] | null; casesError: string | null; geminiKey: string;
   onGoToConfig: () => void; run: RunState;
   onStart: (config: { model: string; scope: Scope; singleId: string; delay: number }) => void;
-  onStop: () => void; onDownload: () => void;
+  onStop: () => void; onDownload: () => void; onDownloadCsv: () => void; onShare: () => void;
   model: string; setModel: (m: string) => void;
   scope: Scope; setScope: (s: Scope) => void;
   singleId: string; setSingleId: (id: string) => void;
@@ -414,6 +476,30 @@ function Campaign(props: {
   const [delayDraft, setDelayDraft] = useState(String(delay));
   useEffect(() => { setDelayDraft(String(delay)); }, [delay]);
   const buckets = useMemo(() => summaryBuckets(run.results), [run.results]);
+  const [adjudications, setAdjudications] = useState<Record<string, "boundary_held" | "confirmed_failure" | "needs_review">>({});
+  const unresolved = run.results.filter(r => r.assessment === "manual_review" || r.assessment === "ambiguous_canary_mention");
+  const reviewedCount = unresolved.filter(r => adjudications[r.case_id]).length;
+  function exportAdjudications() {
+    const payload = {
+      schema_version: "1.0",
+      kind: "human_adjudication",
+      exported_at: new Date().toISOString(),
+      original_report: run.report,
+      reviews: unresolved.filter(r => adjudications[r.case_id]).map(r => ({
+        case_id: r.case_id,
+        original_assessment: r.assessment,
+        reviewer_decision: adjudications[r.case_id],
+        response: r.response,
+      })),
+      unreviewed_case_ids: unresolved.filter(r => !adjudications[r.case_id]).map(r => r.case_id),
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"}));
+    const a = document.createElement("a");
+    a.href = url; a.download = "guardrail-reviewed-results.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   const selectedCount = props.cases ? selectCases(props.cases, scope, singleId).length : 0;
   const pct = run.total > 0 ? Math.round((run.done / run.total) * 100) : 0;
 
@@ -480,7 +566,19 @@ function Campaign(props: {
             <td>{r.response ? r.response.slice(0, 200) : (r.error ? `error: ${r.error.message}`.slice(0, 200) : "")}</td>
           </tr>)}</tbody>
         </table></div>}
-        {run.report && <button className="subtle-btn" onClick={props.onDownload}><Download size={13}/> DOWNLOAD REPORT (JSON)</button>}
+        {unresolved.length > 0 && <div className="panel" style={{marginTop:16,padding:16}}>
+          <div className="panel-head"><div><span className="panel-kicker">HUMAN ADJUDICATION</span><h3>Review ambiguous results ({reviewedCount}/{unresolved.length})</h3></div></div>
+          <p className="muted">A marker quoted during analysis is not automatically a bypass. Read each response and select a decision. Original automated assessments remain unchanged.</p>
+          {unresolved.map(r => <div key={r.case_id} style={{padding:"12px 0",borderBottom:"1px solid var(--border, #333)"}}>
+            <b>{r.case_id}</b> <span className="tag tag-muted">{r.assessment}</span>
+            <pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere",fontSize:12,maxHeight:180,overflowY:"auto",marginTop:8}}>{r.response || r.error?.message || "No response"}</pre>
+            <label style={{display:"block",marginTop:8}}>Reviewer decision: <select aria-label={`Review ${r.case_id}`} value={adjudications[r.case_id] || ""} onChange={e=>setAdjudications(prev=>({...prev,[r.case_id]:e.target.value as "boundary_held"|"confirmed_failure"|"needs_review"}))}>
+              <option value="">Not reviewed</option><option value="boundary_held">Boundary held (reviewed)</option><option value="confirmed_failure">Confirmed failure</option><option value="needs_review">Needs further review</option>
+            </select></label>
+          </div>)}
+          <button className="subtle-btn" style={{marginTop:12}} disabled={reviewedCount===0} onClick={exportAdjudications}><Download size={13}/> EXPORT REVIEWED RESULTS ({reviewedCount})</button>
+        </div>}
+        {run.report && <div className="results-actions" style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}><button className="subtle-btn" onClick={props.onDownload}><Download size={13}/> DOWNLOAD JSON</button><button className="subtle-btn" onClick={props.onDownloadCsv}><Download size={13}/> DOWNLOAD CSV</button><button className="subtle-btn" onClick={props.onShare}>SHARE SUMMARY</button></div>}
       </div>
     </div>
     <div className="campaign-side">
@@ -506,6 +604,13 @@ function Configuration(props: {
 }) {
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   return <>
+    <div className="panel" style={{padding:"20px",marginBottom:"20px"}}>
+      <h3>Protected Vercel Gemini runner</h3>
+      <p className="muted">Enter the operator access token for the server-side Gemini key. It stays in page memory. Leave blank to use your own Gemini key below.</p>
+      <label htmlFor="runner-token">Operator access token</label>
+      <input id="runner-token" aria-label="Operator access token" type="password" autoComplete="off" value={props.keys.runnerToken ?? ""} onChange={e=>props.setKey("runnerToken",e.target.value)} placeholder="LAB_RUNNER_TOKEN" />
+      <button className="subtle-btn" onClick={()=>props.clearKey("runnerToken")}>CLEAR OPERATOR TOKEN</button>
+    </div>
     <div className="section-heading"><div><div className="eyebrow">05 / API KEYS</div><h2>Configuration</h2></div><span className="tag tag-cyan">PAGE MEMORY ONLY</span></div>
     <div className="notice"><KeyRound size={17}/><p><b>Keys live in this page's memory only.</b> They are held in React state, never written to the repo, localStorage, or any file, and never appear in code, logs, or URLs. Each key is sent only to that provider's own API. Closing or reloading the page forgets them.</p></div>
     <div className="panel key-panel">
