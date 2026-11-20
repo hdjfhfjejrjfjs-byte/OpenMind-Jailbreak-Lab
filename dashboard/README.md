@@ -2,6 +2,8 @@
 
 A responsive cyberpunk-style frontend for the OpenMind-Jailbreak-Lab project. Built with React + Vite and deployed as a static site on Vercel.
 
+Live demo: https://openmind-jailbreak-lab.vercel.app/
+
 ## What is included
 
 - Neon-dark responsive dashboard with animated scanline/grid effects.

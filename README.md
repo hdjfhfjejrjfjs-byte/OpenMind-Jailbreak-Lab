@@ -13,7 +13,7 @@
 
 **Probe the boundary. Measure the response. Preserve the evidence.**
 
-**[Try it in your browser — live Hugging Face Space](https://huggingface.co/spaces/Grimxlock/OpenMind-Jailbreak-Lab)** · Run the real 76-case Guardrail Lab suite against Gemini with your own free API key. No install needed.
+**[Try it in your browser — live dashboard](https://openmind-jailbreak-lab.vercel.app/)** · Run the real 76-case Guardrail Lab suite against Gemini with your own free API key. No install needed. Also on [Hugging Face Spaces](https://huggingface.co/spaces/Grimxlock/OpenMind-Jailbreak-Lab).
 
 [Quick start](#-quick-start) · [What’s inside](#-whats-inside) · [Providers](#-provider-matrix) · [Run a campaign](#-run-a-multi-provider-campaign) · [Docs](#-documentation)
 
@@ -120,7 +120,7 @@ The wider Guardrail Lab adapter matrix also documents GLM/Zhipu, Moonshot, NVIDI
 
 ## // Quick start
 
-No install? Run the lab in your browser instead: [live Hugging Face Space](https://huggingface.co/spaces/Grimxlock/OpenMind-Jailbreak-Lab).
+No install? Run the lab in your browser instead: [live dashboard](https://openmind-jailbreak-lab.vercel.app/) or [live Hugging Face Space](https://huggingface.co/spaces/Grimxlock/OpenMind-Jailbreak-Lab).
 
 **Requirements:** Python 3.10+ and Git.
 
