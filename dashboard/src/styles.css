@@ -136,3 +136,9 @@
 @media (prefers-reduced-motion:no-preference) { .suite-dial i { animation:spin 3.6s linear infinite; } }
 @media (max-width:1050px) { .hero-row:has(.suite-scope) { flex-wrap:wrap; gap:18px; } }
 @media (max-width:560px) { .suite-scope { width:100%; justify-content:flex-start; padding:12px 18px; gap:22px; } .suite-dial { width:78px; } }
+
+button.suite-dial { border: 0; padding: 0; cursor: pointer; }
+.suite-key button { min-height: 44px; padding: 6px 10px; border: 1px solid #55f3f255; background: #10222b; color: var(--cyan); border-radius: 4px; font: 12px var(--mono); text-align: left; cursor: pointer; }
+.suite-key button + button { border-color: #a58bff66; color: var(--violet); background: #1c1b32; }
+.suite-scope button:focus-visible { outline: 2px solid white; outline-offset: 3px; }
+.suite-scope button:hover { filter: brightness(1.18); }
