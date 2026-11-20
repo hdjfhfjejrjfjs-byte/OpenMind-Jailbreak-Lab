@@ -90,6 +90,10 @@ export default function App() {
   // tab switch — so the side panel showed the wrong scope, case count and
   // delay for the run in flight. Lifted here, it survives tab switches.
   const [runModel, setRunModel] = useState(DEFAULT_MODEL);
+  function openSuite(scope: Scope) {
+    if (!run.running) setRunScope(scope);
+    setTab("Campaign runner");
+  }
   const [runScope, setRunScope] = useState<Scope>("all");
   const [runSingleId, setRunSingleId] = useState("GL-001");
   const [runDelay, setRunDelay] = useState(5);
@@ -378,7 +382,13 @@ export default function App() {
             <h1>{tab === "Overview" ? <>Probe the boundary.<br/><em>Prove the result.</em></> : tab === "Campaign runner" ? <>Campaign <em>control.</em></> : tab === "Providers" ? <>Multi-model <em>matrix.</em></> : tab === "Configuration" ? <>Keys, <em>kept local.</em></> : tab === "Documentation" ? <>How the lab <em>works.</em></> : <>Evidence <em>ledger.</em></>}</h1>
             <p className="hero-copy">A controlled environment for evaluating instruction boundaries, guardrails, and model robustness — with reproducible evidence.</p>
           </div>
-          {tab === "Overview" ? <div className="suite-scope"><div className="suite-dial" aria-hidden="true"><i/><b>76</b></div><div className="suite-key"><strong>Benchmark suite</strong><span><i/>24 core cases</span><span><i/>52 adaptations</span></div></div> : <div className="hero-orb"><div className="orb-ring ring-one"/><div className="orb-ring ring-two"/><div className="orb-core"><Fingerprint size={35}/><span>OMJB</span></div><div className="orb-cross cross-a"/><div className="orb-cross cross-b"/></div>}
+          {tab === "Overview" ? <div className="suite-scope"><button type="button" className="suite-dial" aria-label={run.running ? "View active campaign" : "Configure all 76 cases"} onClick={() => openSuite("all")}><i aria-hidden="true"/><b>76</b></button>
+            <div className="suite-key"><strong>{run.running ? "Campaign in progress" : "Choose campaign scope"}</strong>
+              {run.running ? <button onClick={() => openSuite("all")}>View campaign ↗</button> : <>
+                <button onClick={() => openSuite("core")}>24 core cases ↗</button>
+                <button onClick={() => openSuite("source")}>52 adaptations ↗</button>
+              </>}
+            </div></div> : <div className="hero-orb"><div className="orb-ring ring-one"/><div className="orb-ring ring-two"/><div className="orb-core"><Fingerprint size={35}/><span>OMJB</span></div><div className="orb-cross cross-a"/><div className="orb-cross cross-b"/></div>}
         </section>
 
         <div className="status-strip"><div className="status-left"><span className="live-dot"/><b>{stripLabel}</b><span className="status-sep">/</span><span>{notice}</span></div><div className="status-right"><span>UTC {new Date().toLocaleTimeString("en-GB",{hour12:false,timeZone:"UTC"})}</span><span className="status-sep">·</span><span>BUILD 0.8.0</span></div></div>
