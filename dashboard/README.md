@@ -38,7 +38,7 @@ npm run preview
 6. If connecting an API, set `VITE_API_BASE_URL` in Project Settings → Environment Variables.
 7. Deploy.
 
-`vercel.json` includes an SPA rewrite so dashboard routes resolve correctly.
+`vercel.json` includes an SPA rewrite as a safety net. The dashboard has no client-side routes (navigation is tab state), so the rewrite is normally a no-op.
 
 ## Deploy to Render
 
@@ -49,7 +49,7 @@ npm run preview
 5. Add `VITE_API_BASE_URL` if your backend is deployed separately.
 6. Deploy.
 
-`render.yaml` is included as a Blueprint option.
+`render.yaml` is included as a Blueprint option. Blueprints only read `render.yaml` at the repository root: if you deploy from the monorepo (where this file lives at `dashboard/render.yaml`), either copy it to the repo root or create the static site manually as above. `render.yaml` already sets `VITE_API_BASE_URL` to the live backend; change it if your backend lives elsewhere. Without that variable a fresh deploy silently runs in local demo mode.
 
 ## Connect the Python evaluation engine
 
@@ -69,7 +69,7 @@ The UI expects this optional endpoint:
   }
   ```
 
-The API should return JSON, ideally including a campaign/run identifier and status. The exact adapter is not assumed here: wire this route to your existing Python CLI or service after confirming its actual interface. Until an API base URL is configured, the Run Campaign button operates in clearly marked local demo mode and does not contact a model.
+The API should return JSON, ideally including a campaign/run identifier and status. The live backend returns `id`, `status: "completed"`, plus the run report (`total`, `allowed`, `blocked`, `review`, `errors`, `scored`, `allow_rate`); the UI surfaces the error count, so a completed run with errored probes is shown as completed-with-errors, not as a success. The exact adapter is not assumed here: wire this route to your existing Python CLI or service after confirming its actual interface. Until an API base URL is configured, the Run Campaign button operates in clearly marked local demo mode and does not contact a model. On load the UI probes `GET /health` when an API base URL is set, so the connection pill reports whether the backend actually answered instead of only whether the variable is set.
 
 ## Security notes
 

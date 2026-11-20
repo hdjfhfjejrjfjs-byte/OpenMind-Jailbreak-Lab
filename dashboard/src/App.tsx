@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity, ArrowUpRight, Atom, Bell, Check, ChevronDown, CircleHelp,
-  Command, Cpu, Download, FileCheck2, Fingerprint, FlaskConical, Gauge,
+  Cpu, Download, FileCheck2, Fingerprint, FlaskConical, Gauge,
   Github, LayoutDashboard, LockKeyhole, Menu, Play, Radio, RefreshCw,
-  Search, Settings2, Shield, ShieldCheck, SlidersHorizontal, Sparkles,
+  Settings2, Shield, ShieldCheck,
   Terminal, Workflow, X, Zap
 } from "lucide-react";
+
+type ApiHealth = "unknown" | "checking" | "ok" | "down";
 
 type Tab = "Overview" | "Campaign runner" | "Providers" | "Evidence";
 const providers = [
@@ -19,10 +21,13 @@ const providers = [
   { id: "custom", name: "Custom endpoint", model: "Operator configured", color: "muted", key: "Server-side config" }
 ];
 
+// Seed rows are demo data, not real activity: each detail says so, and the
+// "Recent activity" panel shows SESSION FEED (not LIVE FEED) until the
+// backend answers /health. Real runs prepend their own events above these.
 const initialEvents = [
-  { time: "19:42:08", title: "Benchmark manifest loaded", detail: "81 cases · OpenMind Benchmark v0.8.0", type: "ok" },
-  { time: "19:41:52", title: "Provider adapters discovered", detail: "8 evaluation targets available in this interface", type: "info" },
-  { time: "19:40:11", title: "Evidence store ready", detail: "Waiting for a connected evaluation API", type: "info" }
+  { time: "19:42:08", title: "Benchmark manifest loaded", detail: "Demo seed · 81 cases · OpenMind Benchmark v0.8.0 — no API call made", type: "ok" },
+  { time: "19:41:52", title: "Provider adapters discovered", detail: "Demo seed · 8 evaluation targets available in this interface", type: "info" },
+  { time: "19:40:11", title: "Evidence store ready", detail: "Demo seed · Waiting for a connected evaluation API", type: "info" }
 ];
 
 export default function App() {
@@ -34,10 +39,34 @@ export default function App() {
   const [workers, setWorkers] = useState(2);
   const [timeout, setTimeout] = useState(45);
   const [running, setRunning] = useState(false);
-  const [notice, setNotice] = useState("Demo mode · API not connected");
-  const [events, setEvents] = useState(initialEvents);
-  const apiBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
+  // Normalize once: trim whitespace and strip *all* trailing slashes, so
+  // "https://host///" or " https://host/ " cannot produce "//api/..." URLs.
+  const apiBase = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, "");
   const connected = Boolean(apiBase);
+  const [notice, setNotice] = useState(connected ? "Checking API…" : "Demo mode · API not connected");
+  const [events, setEvents] = useState(initialEvents);
+  // Health is probed, never assumed: the pill used to read "API CONFIGURED"
+  // and the strip "SYSTEM NOMINAL" with no check at all — including in demo
+  // mode, where no backend exists. Unknown until the probe answers.
+  const [apiHealth, setApiHealth] = useState<ApiHealth>(connected ? "checking" : "unknown");
+
+  useEffect(() => {
+    if (!apiBase) return;
+    let cancelled = false;
+    // No timeout here on purpose: a Render free-tier backend asleep after
+    // 15 min idle takes ~1 min to wake, and the held request then succeeds.
+    fetch(`${apiBase}/health`)
+      .then(r => { if (!cancelled) setApiHealth(r.ok ? "ok" : "down"); })
+      .catch(() => { if (!cancelled) setApiHealth("down"); });
+    return () => { cancelled = true; };
+  }, [apiBase]);
+
+  useEffect(() => {
+    if (!connected) return;
+    if (apiHealth === "ok") setNotice("API reachable · backend answered /health");
+    else if (apiHealth === "down") setNotice("API unreachable · backend may be waking (Render free tier sleeps after 15 min idle) — retry in ~1 min");
+    else if (apiHealth === "checking") setNotice("Checking API…");
+  }, [apiHealth, connected]);
 
   const chosenNames = useMemo(() => selected.map(id => providers.find(p => p.id === id)?.name).filter(Boolean).join(", "), [selected]);
 
@@ -61,13 +90,49 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ providers: selected, suite, max_requests: maxRequests, workers, timeout_seconds: timeout })
       });
-      if (!response.ok) throw new Error(`API returned ${response.status}`);
-      const data = await response.json();
-      setNotice("Campaign request accepted by API");
-      setEvents(old => [{ time: stamp, title: "Campaign submitted", detail: data.id ? `Run ID: ${data.id}` : "Backend accepted the campaign request", type: "ok" }, ...old]);
+      if (!response.ok) {
+        // FastAPI errors carry {detail}; surface it instead of a bare status.
+        // (Guard-not-configured is a 400 whose full explanation is in detail.)
+        let detail = "";
+        try {
+          const errBody = await response.json();
+          if (typeof errBody?.detail === "string") detail = errBody.detail;
+        } catch { /* non-JSON error body: fall through to the bare status */ }
+        throw new Error(detail ? `API ${response.status} · ${detail}` : `API returned ${response.status}`);
+      }
+      let data: Record<string, unknown>;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error("API returned malformed JSON");
+      }
+      // The backend always answers 200 with status "completed", even when
+      // every probe errored (guard 503s: total 3, errors 3, scored 0).
+      // Report the outcome, not just the HTTP status.
+      const total = typeof data.total === "number" ? data.total : null;
+      const errors = typeof data.errors === "number" ? data.errors : null;
+      const scored = typeof data.scored === "number" ? data.scored : null;
+      const allowRate = typeof data.allow_rate === "number" ? data.allow_rate : null;
+      const runId = typeof data.id === "string" ? data.id : null;
+      const status = typeof data.status === "string" ? data.status : null;
+      const outcome = total !== null && errors !== null
+        ? `${total} probes · ${scored ?? "?"} scored · ${errors} errors${allowRate !== null ? ` · allow rate ${(allowRate * 100).toFixed(0)}%` : ""}`
+        : "Backend accepted the campaign request";
+      const type = errors === null ? "ok" : errors === 0 ? "ok" : total !== null && errors >= total ? "bad" : "warn";
+      const title = status !== null && status !== "completed"
+        ? `Campaign ${status}`
+        : errors !== null && errors > 0 ? "Campaign completed with errors" : "Campaign completed";
+      setNotice(`${title} · ${outcome}`);
+      setEvents(old => [{ time: stamp, title, detail: `${runId ? `Run ID: ${runId} · ` : ""}${outcome}`, type }, ...old]);
     } catch (error) {
-      setNotice(`API error · ${error instanceof Error ? error.message : "Request failed"}`);
-      setEvents(old => [{ time: stamp, title: "Campaign request failed", detail: "Check the API URL, CORS policy, and backend logs.", type: "bad" }, ...old]);
+      // fetch() rejects with TypeError on network failure (DNS, refused,
+      // CORS, or a sleeping Render backend whose wake takes ~1 min).
+      const message = error instanceof Error ? error.message : "Request failed";
+      const hint = error instanceof TypeError
+        ? "Network failure — check VITE_API_BASE_URL; a Render free-tier backend asleep after 15 min idle takes ~1 min to wake, then retry."
+        : "Check the API URL, CORS policy, and backend logs.";
+      setNotice(`API error · ${message}`);
+      setEvents(old => [{ time: stamp, title: "Campaign request failed", detail: hint, type: "bad" }, ...old]);
     } finally {
       setRunning(false);
     }
@@ -113,7 +178,7 @@ export default function App() {
     <main className="main-area">
       <header className="topbar">
         <div className="top-left"><button className="icon-btn mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={19}/></button><div className="breadcrumb">WORKSPACE <span>/</span> <b>{tab.toUpperCase()}</b></div></div>
-        <div className="top-actions"><div className={`connection-pill ${connected ? "connected" : ""}`}><span className="pulse-dot"/>{connected ? "API CONFIGURED" : "LOCAL PREVIEW"}</div><button className="icon-btn" aria-label="Notifications" onClick={() => setNotice("No new system alerts.")}><Bell size={17}/></button><div className="top-avatar">O</div></div>
+        <div className="top-actions"><div className={`connection-pill ${connected && apiHealth === "ok" ? "connected" : ""}`}><span className="pulse-dot"/>{!connected ? "LOCAL PREVIEW" : apiHealth === "ok" ? "API REACHABLE" : apiHealth === "down" ? "API UNREACHABLE" : "CHECKING API…"}</div><button className="icon-btn" aria-label="Notifications" onClick={() => setNotice("No new system alerts.")}><Bell size={17}/></button><div className="top-avatar">O</div></div>
       </header>
 
       <div className="content-wrap">
@@ -125,19 +190,19 @@ export default function App() {
           <div className="hero-orb"><div className="orb-ring ring-one"/><div className="orb-ring ring-two"/><div className="orb-core"><Fingerprint size={35}/><span>OMJB</span></div><div className="orb-cross cross-a"/><div className="orb-cross cross-b"/></div>
         </section>
 
-        <div className="status-strip"><div className="status-left"><span className="live-dot"/><b>SYSTEM NOMINAL</b><span className="status-sep">/</span><span>{notice}</span></div><div className="status-right"><span>UTC {new Date().toLocaleTimeString("en-GB",{hour12:false})}</span><span className="status-sep">·</span><span>BUILD 0.8.0</span></div></div>
+        <div className="status-strip"><div className="status-left"><span className="live-dot"/><b>{!connected ? "LOCAL PREVIEW" : apiHealth === "ok" ? "SYSTEM NOMINAL" : apiHealth === "down" ? "API UNREACHABLE" : "CHECKING API…"}</b><span className="status-sep">/</span><span>{notice}</span></div><div className="status-right"><span>UTC {new Date().toLocaleTimeString("en-GB",{hour12:false,timeZone:"UTC"})}</span><span className="status-sep">·</span><span>BUILD 0.8.0</span></div></div>
 
-        {tab === "Overview" && <Overview setTab={setTab} events={events}/>}
+        {tab === "Overview" && <Overview setTab={setTab} events={events} apiHealth={apiHealth}/>}
         {tab === "Campaign runner" && <Campaign selected={selected} toggle={toggleProvider} suite={suite} setSuite={setSuite} maxRequests={maxRequests} setMaxRequests={setMaxRequests} workers={workers} setWorkers={setWorkers} timeout={timeout} setTimeout={setTimeout} run={runCampaign} running={running} connected={connected} chosenNames={chosenNames}/>}
         {tab === "Providers" && <Providers selected={selected} toggle={toggleProvider}/>}
-        {tab === "Evidence" && <Evidence events={events}/>}
+        {tab === "Evidence" && <Evidence events={events} notify={setNotice}/>}
         <footer><span>OPENMIND // TEST WITH INTENT. VERIFY WITH EVIDENCE.</span><span><LockKeyhole size={12}/> AUTHORIZED RESEARCH ONLY</span></footer>
       </div>
     </main>
   </div>;
 }
 
-function Overview({setTab, events}: {setTab:(t:Tab)=>void; events:{time:string;title:string;detail:string;type:string}[]}) {
+function Overview({setTab, events, apiHealth}: {setTab:(t:Tab)=>void; events:{time:string;title:string;detail:string;type:string}[]; apiHealth: ApiHealth}) {
   return <>
     <div className="metrics-grid">
       <Metric icon={FlaskConical} label="BENCHMARK CASES" value="81" sub="v0.8.0 · versioned corpus" color="cyan"/>
@@ -153,7 +218,7 @@ function Overview({setTab, events}: {setTab:(t:Tab)=>void; events:{time:string;t
         <div className="progress-label"><span>SUITE CATALOGUED</span><b>100%</b></div><div className="progress-track"><i style={{width:"100%"}}/></div>
         <button className="primary-btn" onClick={() => setTab("Campaign runner")}><Play size={15} fill="currentColor"/> Configure evaluation <ArrowUpRight size={15}/></button>
       </div>
-      <div className="panel activity-panel"><div className="panel-head"><div><span className="panel-kicker">SYSTEM TELEMETRY</span><h3>Recent activity</h3></div><span className="live-label"><i/> LIVE FEED</span></div>
+      <div className="panel activity-panel"><div className="panel-head"><div><span className="panel-kicker">SYSTEM TELEMETRY</span><h3>Recent activity</h3></div><span className="live-label"><i/> {apiHealth === "ok" ? "LIVE FEED" : "SESSION FEED"}</span></div>
         <div className="event-list">{events.slice(0,4).map((e,i)=><div className="event-row" key={i}><div className={`event-icon ${e.type}`}>{e.type==="ok"?<Check size={14}/>:e.type==="warn"?<Zap size={14}/>:<Radio size={14}/>}</div><div className="event-copy"><b>{e.title}</b><span>{e.detail}</span></div><time>{e.time}</time></div>)}</div>
         <button className="subtle-btn" onClick={() => setTab("Evidence")}>VIEW EVIDENCE LOG <ArrowUpRight size={13}/></button>
       </div>
@@ -183,11 +248,11 @@ function Campaign(props:any) {
       <div className="provider-pick-grid">{providers.map(p=><button key={p.id} className={`provider-pick ${props.selected.includes(p.id)?"picked":""}`} onClick={()=>props.toggle(p.id)}><span className={`provider-dot dot-${p.color}`}/><span>{p.name}</span>{props.selected.includes(p.id)&&<Check size={14}/>}</button>)}</div>
       <div className="field-label limits-label">EXECUTION LIMITS <span>HARD CEILINGS</span></div>
       <div className="limits-grid">
-        <label>MAX REQUESTS <div className="number-control"><button onClick={()=>props.setMaxRequests(Math.max(1,props.maxRequests-5))}>−</button><b>{props.maxRequests}</b><button onClick={()=>props.setMaxRequests(Math.min(500,props.maxRequests+5))}>+</button></div></label>
-        <label>WORKERS <div className="number-control"><button onClick={()=>props.setWorkers(Math.max(1,props.workers-1))}>−</button><b>{props.workers}</b><button onClick={()=>props.setWorkers(Math.min(8,props.workers+1))}>+</button></div></label>
-        <label>TIMEOUT (SEC) <div className="number-control"><button onClick={()=>props.setTimeout(Math.max(5,props.timeout-5))}>−</button><b>{props.timeout}</b><button onClick={()=>props.setTimeout(Math.min(180,props.timeout+5))}>+</button></div></label>
+        <label>MAX REQUESTS <div className="number-control"><button aria-label="Decrease max requests" onClick={()=>props.setMaxRequests(Math.max(1,props.maxRequests-5))}>−</button><b>{props.maxRequests}</b><button aria-label="Increase max requests" onClick={()=>props.setMaxRequests(Math.min(500,props.maxRequests+5))}>+</button></div></label>
+        <label>WORKERS <div className="number-control"><button aria-label="Decrease workers" onClick={()=>props.setWorkers(Math.max(1,props.workers-1))}>−</button><b>{props.workers}</b><button aria-label="Increase workers" onClick={()=>props.setWorkers(Math.min(8,props.workers+1))}>+</button></div></label>
+        <label>TIMEOUT (SEC) <div className="number-control"><button aria-label="Decrease timeout" onClick={()=>props.setTimeout(Math.max(5,props.timeout-5))}>−</button><b>{props.timeout}</b><button aria-label="Increase timeout" onClick={()=>props.setTimeout(Math.min(180,props.timeout+5))}>+</button></div></label>
       </div>
-      <button className="primary-btn run-btn" disabled={props.running||!props.selected.length} onClick={props.run}>{props.running?<RefreshCw size={16} className="spin"/>:<Play size={16} fill="currentColor"/>}{props.running?"Submitting…":"Prepare campaign"}<ArrowUpRight size={15}/></button>
+      <button className="primary-btn run-btn" disabled={props.running||!props.selected.length} onClick={props.run}>{props.running?<RefreshCw size={16} className="spin"/>:<Play size={16} fill="currentColor"/>}{props.running?"Running…":"Run campaign"}<ArrowUpRight size={15}/></button>
       <div className="safe-note"><LockKeyhole size={14}/><span>Use reviewed benign probes. Backend must enforce authorization, budget, and request limits.</span></div>
     </div>
     <div className="campaign-side">
@@ -204,9 +269,16 @@ function Providers({selected,toggle}:{selected:string[];toggle:(id:string)=>void
   </>;
 }
 
-function Evidence({events}:{events:{time:string;title:string;detail:string;type:string}[]}) {
+function Evidence({events, notify}:{events:{time:string;title:string;detail:string;type:string}[]; notify:(msg:string)=>void}) {
   return <><div className="section-heading"><div><div className="eyebrow">04 / AUDIT TRAIL</div><h2>Evidence ledger</h2></div><span className="tag tag-muted">SESSION LOG</span></div>
-    <div className="panel evidence-panel"><div className="panel-head"><div><span className="panel-kicker">EVENT STREAM</span><h3>Recorded activity</h3></div><button className="subtle-btn" onClick={()=>navigator.clipboard?.writeText(JSON.stringify(events,null,2))}><Download size={13}/> COPY JSON</button></div>
+    <div className="panel evidence-panel"><div className="panel-head"><div><span className="panel-kicker">EVENT STREAM</span><h3>Recorded activity</h3></div><button className="subtle-btn" onClick={()=>{
+      const text = JSON.stringify(events,null,2);
+      if (!navigator.clipboard) { notify("Copy unavailable · clipboard needs a secure browser context."); return; }
+      navigator.clipboard.writeText(text).then(
+        () => notify("Evidence JSON copied to clipboard."),
+        () => notify("Copy failed · clipboard write was rejected.")
+      );
+    }}><Download size={13}/> COPY JSON</button></div>
       {events.map((e,i)=><div className="evidence-row" key={i}><div className={`event-icon ${e.type}`}>{e.type==="ok"?<Check size={14}/>:e.type==="warn"?<Zap size={14}/>:<Radio size={14}/>}</div><div><b>{e.title}</b><p>{e.detail}</p></div><time>{e.time}</time></div>)}
       <div className="empty-evidence"><Fingerprint size={25}/><b>Evidence stays inspectable.</b><span>Connect the evaluation API to populate real run records and provider responses.</span></div>
     </div>

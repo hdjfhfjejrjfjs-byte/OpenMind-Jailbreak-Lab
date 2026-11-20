@@ -1,9 +1,20 @@
+# Render Blueprint for the neon dashboard (static site).
+# Blueprints only read render.yaml at the REPOSITORY ROOT: if you deploy
+# from the openmind-jailbreak-lab monorepo (where this file lives at
+# dashboard/render.yaml), either copy it to the repo root or create the
+# static site manually in the Render dashboard instead.
+# VITE_API_BASE_URL is baked in at build time: without it, a fresh deploy
+# silently runs in local demo mode. The value below points at the live
+# backend; replace it if your backend lives elsewhere.
 services:
   - type: web
     name: openmind-neon-dashboard
     runtime: static
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://openmind-omjb-server.onrender.com
     routes:
       - type: rewrite
         source: /*
