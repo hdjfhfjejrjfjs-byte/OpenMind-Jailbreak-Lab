@@ -378,7 +378,7 @@ export default function App() {
             <h1>{tab === "Overview" ? <>Probe the boundary.<br/><em>Prove the result.</em></> : tab === "Campaign runner" ? <>Campaign <em>control.</em></> : tab === "Providers" ? <>Multi-model <em>matrix.</em></> : tab === "Configuration" ? <>Keys, <em>kept local.</em></> : tab === "Documentation" ? <>How the lab <em>works.</em></> : <>Evidence <em>ledger.</em></>}</h1>
             <p className="hero-copy">A controlled environment for evaluating instruction boundaries, guardrails, and model robustness — with reproducible evidence.</p>
           </div>
-          <div className="hero-orb"><div className="orb-ring ring-one"/><div className="orb-ring ring-two"/><div className="orb-core"><Fingerprint size={35}/><span>OMJB</span></div><div className="orb-cross cross-a"/><div className="orb-cross cross-b"/></div>
+          {tab === "Overview" ? <div className="suite-scope"><div className="suite-dial" aria-hidden="true"><i/><b>76</b></div><div className="suite-key"><strong>Benchmark suite</strong><span><i/>24 core cases</span><span><i/>52 adaptations</span></div></div> : <div className="hero-orb"><div className="orb-ring ring-one"/><div className="orb-ring ring-two"/><div className="orb-core"><Fingerprint size={35}/><span>OMJB</span></div><div className="orb-cross cross-a"/><div className="orb-cross cross-b"/></div>}
         </section>
 
         <div className="status-strip"><div className="status-left"><span className="live-dot"/><b>{stripLabel}</b><span className="status-sep">/</span><span>{notice}</span></div><div className="status-right"><span>UTC {new Date().toLocaleTimeString("en-GB",{hour12:false,timeZone:"UTC"})}</span><span className="status-sep">·</span><span>BUILD 0.8.0</span></div></div>
