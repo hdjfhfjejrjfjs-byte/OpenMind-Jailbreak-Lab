@@ -416,7 +416,7 @@ export default function App() {
         {tab === "Evidence" && <Evidence events={events} notify={setNotice}/>}
         {tab === "Configuration" && <Configuration keys={keys} setKey={setKey} clearKey={clearKey} clearAllKeys={clearAllKeys}/>}
         {tab === "Documentation" && <Documentation setTab={setTab}/>}
-        <footer><span>OPENMIND // TEST WITH INTENT. VERIFY WITH EVIDENCE.</span><span><LockKeyhole size={12}/> AUTHORIZED RESEARCH ONLY</span></footer>
+        <footer><a href="https://github.com/tjcrims0nx/OpenMind-Jailbreak-Lab" target="_blank" rel="noreferrer" aria-label="OpenMind repository on GitHub" className="github-link" style={{fontSize:11}}><Github size={14} aria-hidden="true"/>Repo</a><span><LockKeyhole size={12}/> AUTHORIZED RESEARCH ONLY</span></footer>
       </div>
     </main>
   </div>;
